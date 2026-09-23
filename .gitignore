@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.onnxenv/
+
+# Build artifacts
+*.o
+*.a
+*.so
+*.so.*
+*.out
+build/
+ran_build/
+cmake-build-*/
+cmake_targets/ran_build/
+flexric/build/
+
+# Runtime
+core
+core.*
+*.pid
+*.db
+
+# Logs
+*.log
+!evidence/**/*.log
+
+# Packet captures
+*.pcap
+*.pcapng
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key
+credentials*
+secrets*

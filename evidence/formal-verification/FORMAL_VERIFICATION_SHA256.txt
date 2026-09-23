@@ -1,0 +1,15 @@
+Formal DQN v2 verification artifact hashes
+Generated: 2026-09-19T23:45:52-04:00
+
+=== ONNX MODEL ===
+699c2d326b8c86f81d86929fcf28e3a00086687e0391c6a1bd4119b92001103e  models/formal_dqn_v2_candidate_16000.onnx
+
+=== MARABOU RESULTS ===
+9e0db62f151f16c10e81bb91c9d98cc748b0597f6be22ad810d4f565efd2ebb7  marabou_formal_dqn_v2_results.txt
+
+=== KERAS SAVEDMODEL FILES ===
+22d99426e59c77de2de8a02ef2d7a004ebf78cc6f519b76f5d43e419ca4a0e2c  models/formal_dqn_v2_candidate_16000/fingerprint.pb
+bb1c9a141d1d20b8cbaf78330509b7577ddf1ae238e17953c53c999bbceab04c  models/formal_dqn_v2_candidate_16000/keras_metadata.pb
+43683f860e6b08574096d3700b61ee3046818c1f402516903e29582a6e2223f5  models/formal_dqn_v2_candidate_16000/saved_model.pb
+d5021b676305450084cbed4beaa5362a24801bf416a7c892dfabfb898c277143  models/formal_dqn_v2_candidate_16000/variables/variables.data-00000-of-00001
+15a2edd3a20bde7756f02e39396a81a6a08176ea9c96a0169e25e82c7fffb842  models/formal_dqn_v2_candidate_16000/variables/variables.index

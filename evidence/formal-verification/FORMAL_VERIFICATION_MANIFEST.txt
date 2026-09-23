@@ -1,0 +1,25 @@
+FORMAL DQN V2 — VERIFICATION MANIFEST
+Generated: 2026-09-19T23:53:01-04:00
+
+=== VERIFIED ONNX ===
+699c2d326b8c86f81d86929fcf28e3a00086687e0391c6a1bd4119b92001103e  models/formal_dqn_v2_candidate_16000.onnx
+
+=== VERIFICATION SCRIPT ===
+9adc69969f5ccfc19a1d89f0fc6f6df84c7cb7e3927c74ef76eb88232a75ce4a  verify_formal_dqn_v2.py
+
+=== FINAL VERIFICATION LOG ===
+5bc8ec1d265803656b8cb673f56db44d0613e1cae40bbc84d5e29ef04cb4c863  formal_dqn_v2_final_verification.txt
+
+=== TRAINING / SIMULATION SOURCE ===
+fad9bdbc758c403be18c9b485fe355340a1f969500e0507e3981a77f62265b8a  formal_vanilla_v2.py
+9b692dcc1d24fa651a5fa11b691602edad563bf6d004b31f469bf22146324494  simulation_profiles/simulation_formal.py
+f515e9a2698ebabcc7e5905800568aef312378677dd9eb84351ed1c0f286cca6  Cell.py
+
+=== SOFTWARE VERSIONS ===
+Python 3.10.12
+TensorFlow 2.12.0
+ONNX 1.17.0
+ONNX Runtime 1.23.2
+
+=== MARABOU VERSION ===
+v2.0.0

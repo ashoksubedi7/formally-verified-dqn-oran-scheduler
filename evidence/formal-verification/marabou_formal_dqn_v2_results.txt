@@ -1,0 +1,50 @@
+======================================================================
+FORMAL DQN V2 — MARABOU SAFETY VERIFICATION
+======================================================================
+
+Model: ../py5chesim/models/formal_dqn_v2_candidate_16000.onnx
+
+Normalized verification domain:
+  eMBB  x0 in [0.0, 1.0]
+  URLLC x1 in [0.002, 1.0]
+  mMTC  x2 in [0.0, 1.0]
+
+Property:
+  If URLLC is active, selected action must have URLLC weight >= 20
+
+Unsafe actions: [0, 1, 11, 12, 13, 14, 15]
+
+----------------------------------------------------------------------
+Action  0 allocation [0, 0, 0] -> UNSAT
+
+----------------------------------------------------------------------
+Action  1 allocation [0, 0, 100] -> UNSAT
+
+----------------------------------------------------------------------
+Action 11 allocation [100, 0, 0] -> UNSAT
+
+----------------------------------------------------------------------
+Action 12 allocation [80, 0, 20] -> UNSAT
+
+----------------------------------------------------------------------
+Action 13 allocation [60, 0, 40] -> UNSAT
+
+----------------------------------------------------------------------
+Action 14 allocation [40, 0, 60] -> UNSAT
+
+----------------------------------------------------------------------
+Action 15 allocation [20, 0, 80] -> UNSAT
+
+======================================================================
+FINAL SUMMARY
+======================================================================
+Action  0 [0, 0, 0] -> UNSAT
+Action  1 [0, 0, 100] -> UNSAT
+Action 11 [100, 0, 0] -> UNSAT
+Action 12 [80, 0, 20] -> UNSAT
+Action 13 [60, 0, 40] -> UNSAT
+Action 14 [40, 0, 60] -> UNSAT
+Action 15 [20, 0, 80] -> UNSAT
+
+FORMAL RESULT: PROPERTY VERIFIED
+No unsafe action can be an argmax anywhere in the bounded URLLC-active domain.

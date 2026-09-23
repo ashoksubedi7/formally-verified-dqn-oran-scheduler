@@ -1,0 +1,1184 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 37c6744..253bd0b 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1207,6 +1207,7 @@ set (MAC_NR_SRC
+   ${NR_GNB_MAC_DIR}/gNB_scheduler_bch.c
+   ${NR_GNB_MAC_DIR}/gNB_scheduler_dlsch.c
+   ${NR_GNB_MAC_DIR}/gNB_scheduler_dlsch_default_policies.c
++  ${NR_GNB_MAC_DIR}/nr_slice_manager.c
+   ${NR_GNB_MAC_DIR}/gNB_scheduler_ulsch.c
+   ${NR_GNB_MAC_DIR}/gNB_scheduler_ulsch_default_policies.c
+   ${NR_GNB_MAC_DIR}/gNB_scheduler_primitives.c
+diff --git a/openair2/E2AP/RAN_FUNCTION/CUSTOMIZED/ran_func_slice.c b/openair2/E2AP/RAN_FUNCTION/CUSTOMIZED/ran_func_slice.c
+index 58a39a4..8954430 100644
+--- a/openair2/E2AP/RAN_FUNCTION/CUSTOMIZED/ran_func_slice.c
++++ b/openair2/E2AP/RAN_FUNCTION/CUSTOMIZED/ran_func_slice.c
+@@ -4,7 +4,14 @@
+ 
+ #include "ran_func_slice.h"
+ #include "../../flexric/test/rnd/fill_rnd_data_slice.h"
++
++#include "common/ran_context.h"
++#include "openair2/LAYER2/NR_MAC_gNB/nr_mac_gNB.h"
++#include "openair2/LAYER2/NR_MAC_gNB/nr_slice_manager.h"
++
+ #include <assert.h>
++#include <stdbool.h>
++#include <stdint.h>
+ #include <stdio.h>
+ 
+ bool read_slice_sm(void* data)
+@@ -29,25 +36,180 @@ void read_slice_setup_sm(void* data)
+ sm_ag_if_ans_t write_ctrl_slice_sm(void const* data)
+ {
+   assert(data != NULL);
+-//  assert(data->type == SLICE_CTRL_REQ_V0);
+ 
+-  slice_ctrl_req_data_t const* slice_req_ctrl = (slice_ctrl_req_data_t const* )data; // &data->slice_req_ctrl;
++  slice_ctrl_req_data_t const* slice_req_ctrl =
++      (slice_ctrl_req_data_t const*)data;
++
+   slice_ctrl_msg_t const* msg = &slice_req_ctrl->msg;
+ 
+-  if(msg->type == SLICE_CTRL_SM_V0_ADD){
++  if (msg->type == SLICE_CTRL_SM_V0_ADD) {
++
+     printf("[E2 Agent]: SLICE CONTROL ADD rx\n");
+-  } else if (msg->type == SLICE_CTRL_SM_V0_DEL){
+-    printf("[E2 Agent]: SLICE CONTROL DEL rx\n");
+-  } else if (msg->type == SLICE_CTRL_SM_V0_UE_SLICE_ASSOC){
+-    printf("[E2 Agent]: SLICE CONTROL ASSOC rx\n");
++
++    /*
++     * DQN/FlexRIC transport convention used by this prototype:
++     *
++     *   Slice-SM ID 0 -> eMBB
++     *   Slice-SM ID 1 -> URLLC
++     *   Slice-SM ID 2 -> mMTC
++     *
++     * Each entry must use:
++     *
++     *   SLICE_ALG_SM_V0_NVS
++     *   SLICE_SM_NVS_V0_CAPACITY
++     *
++     * pct_reserved carries the DQN resource-sharing weight as
++     * a fraction in [0.0, 1.0].
++     *
++     * These values are NOT literal PRB counts.
++     */
++
++    const ul_dl_slice_conf_t *dl = &msg->u.add_mod_slice.dl;
++
++    bool valid = true;
++    bool seen[NR_SLICE_COUNT] = {false, false, false};
++    uint8_t weights[NR_SLICE_COUNT] = {0, 0, 0};
++
++    if (dl->len_slices != NR_SLICE_COUNT) {
++      printf("[DQN SLICE CTRL] REJECT: expected %d DL slices, received %u\n",
++             NR_SLICE_COUNT,
++             dl->len_slices);
++      valid = false;
++    }
++
++    if (valid) {
++      for (uint32_t i = 0; i < dl->len_slices; ++i) {
++
++        const fr_slice_t *slice = &dl->slices[i];
++
++        if (slice->id >= NR_SLICE_COUNT) {
++          printf("[DQN SLICE CTRL] REJECT: unknown slice id=%u\n",
++                 slice->id);
++          valid = false;
++          break;
++        }
++
++        if (seen[slice->id]) {
++          printf("[DQN SLICE CTRL] REJECT: duplicate slice id=%u\n",
++                 slice->id);
++          valid = false;
++          break;
++        }
++
++        if (slice->params.type != SLICE_ALG_SM_V0_NVS) {
++          printf("[DQN SLICE CTRL] REJECT: id=%u is not NVS\n",
++                 slice->id);
++          valid = false;
++          break;
++        }
++
++        if (slice->params.u.nvs.conf != SLICE_SM_NVS_V0_CAPACITY) {
++          printf("[DQN SLICE CTRL] REJECT: id=%u is not NVS CAPACITY\n",
++                 slice->id);
++          valid = false;
++          break;
++        }
++
++        float const pct =
++            slice->params.u.nvs.u.capacity.u.pct_reserved;
++
++        if (pct < 0.0f || pct > 1.0f) {
++          printf("[DQN SLICE CTRL] REJECT: id=%u pct_reserved=%f outside [0,1]\n",
++                 slice->id,
++                 pct);
++          valid = false;
++          break;
++        }
++
++        /*
++         * Convert the wire representation [0.0,1.0] to the exact
++         * integer DQN weight representation [0,100].
++         *
++         * +0.5f provides nearest-integer conversion without requiring
++         * a libm dependency.
++         */
++        uint8_t const weight =
++            (uint8_t)(pct * 100.0f + 0.5f);
++
++        weights[slice->id] = weight;
++        seen[slice->id] = true;
++
++        printf("[DQN SLICE CTRL] id=%u pct_reserved=%.3f -> weight=%u\n",
++               slice->id,
++               pct,
++               weight);
++      }
++    }
++
++    if (valid) {
++      for (int i = 0; i < NR_SLICE_COUNT; ++i) {
++        if (!seen[i]) {
++          printf("[DQN SLICE CTRL] REJECT: missing slice id=%d\n", i);
++          valid = false;
++        }
++      }
++    }
++
++    if (valid) {
++
++      gNB_MAC_INST *mac = RC.nrmac[0];
++
++      if (mac == NULL) {
++
++        printf("[DQN SLICE CTRL] REJECT: MAC instance unavailable\n");
++
++      } else {
++
++        bool const accepted =
++            nr_slice_manager_update(&mac->slice_manager,
++                                    weights[NR_SLICE_EMBB],
++                                    weights[NR_SLICE_URLLC],
++                                    weights[NR_SLICE_MMTC]);
++
++        if (accepted) {
++
++          nr_slice_policy_t policy = {0};
++          nr_slice_manager_snapshot(&mac->slice_manager, &policy);
++
++          printf("[DQN SLICE CTRL] POLICY INSTALLED "
++                 "[eMBB=%u, URLLC=%u, mMTC=%u]\n",
++                 policy.weight[NR_SLICE_EMBB],
++                 policy.weight[NR_SLICE_URLLC],
++                 policy.weight[NR_SLICE_MMTC]);
++
++        } else {
++
++          printf("[DQN SLICE CTRL] REJECT: vector [%u,%u,%u] "
++                 "is not in the frozen DQN action space\n",
++                 weights[NR_SLICE_EMBB],
++                 weights[NR_SLICE_URLLC],
++                 weights[NR_SLICE_MMTC]);
++        }
++      }
++    }
++
++  } else if (msg->type == SLICE_CTRL_SM_V0_DEL) {
++
++    printf("[E2 Agent]: SLICE CONTROL DEL rx "
++           "(DQN policy unchanged)\n");
++
++  } else if (msg->type == SLICE_CTRL_SM_V0_UE_SLICE_ASSOC) {
++
++    printf("[E2 Agent]: SLICE CONTROL ASSOC rx "
++           "(DQN uses MAC NSSAI classification)\n");
++
+   } else {
+-    assert(0!=0 && "Unknown msg_type!");
++
++    printf("[E2 Agent]: unknown SLICE CONTROL type=%d\n",
++           msg->type);
+   }
+ 
+-  sm_ag_if_ans_t ans = {.type = CTRL_OUTCOME_SM_AG_IF_ANS_V0};
++  sm_ag_if_ans_t ans = {
++      .type = CTRL_OUTCOME_SM_AG_IF_ANS_V0
++  };
++
+   ans.ctrl_out.type = SLICE_AGENT_IF_CTRL_ANS_V0;
+-  return ans;
+ 
++  return ans;
+ }
+ 
+-
+diff --git a/openair2/E2AP/RAN_FUNCTION/O-RAN/ran_func_kpm.c b/openair2/E2AP/RAN_FUNCTION/O-RAN/ran_func_kpm.c
+index 7a96cb1..0053d0f 100644
+--- a/openair2/E2AP/RAN_FUNCTION/O-RAN/ran_func_kpm.c
++++ b/openair2/E2AP/RAN_FUNCTION/O-RAN/ran_func_kpm.c
+@@ -477,6 +477,7 @@ static const char* kpm_meas_gnb[] = {
+   "DRB.UEThpUl",
+   "RRU.PrbTotDl",
+   "RRU.PrbTotUl",
++  "OAI.RlcTxQueuePktsDl",
+   NULL,
+ };
+ 
+diff --git a/openair2/E2AP/RAN_FUNCTION/O-RAN/ran_func_kpm_subs.c b/openair2/E2AP/RAN_FUNCTION/O-RAN/ran_func_kpm_subs.c
+index 13545fd..dd16400 100644
+--- a/openair2/E2AP/RAN_FUNCTION/O-RAN/ran_func_kpm_subs.c
++++ b/openair2/E2AP/RAN_FUNCTION/O-RAN/ran_func_kpm_subs.c
+@@ -235,6 +235,30 @@ static meas_record_lst_t fill_DRB_RlcSduDelayDl(__attribute__((unused)) const la
+ /* 3GPP TS 28.522 - section 5.1.1.3.1
+   note: per spec, average UE throughput in DL (taken into consideration values from all UEs, and averaged)
+         here calculated as: UE specific throughput in DL */
++
++/* OAI custom measurement:
++ * current number of original DL SDUs waiting in the RLC TX queue
++ * for first transmission.
++ */
++static meas_record_lst_t fill_OAI_RlcTxQueuePktsDl(
++    __attribute__((unused)) const label_info_lst_t label,
++    __attribute__((unused)) uint32_t gran_period_ms,
++    cudu_ue_info_pair_t ue_info,
++    __attribute__((unused)) const size_t ue_idx,
++    __attribute__((unused)) e2_node_level_stats_t* node_stats)
++{
++  meas_record_lst_t meas_record = {0};
++
++  const int rb_id = 1;  // at the moment, only 1 DRB is supported
++  nr_rlc_statistics_t rlc =
++      get_rlc_stats_per_drb(ue_info.ue->rnti, rb_id);
++
++  meas_record.value = INTEGER_MEAS_VALUE;
++  meas_record.int_val = rlc.txbuf_occ_pkts;
++
++  return meas_record;
++}
++
+ static meas_record_lst_t fill_DRB_UEThpDl(__attribute__((unused)) const label_info_lst_t label,
+                                           uint32_t gran_period_ms,
+                                           cudu_ue_info_pair_t ue_info,
+@@ -396,7 +420,8 @@ static kv_measure_t lst_measure[] = {
+   {.key = "DRB.UEThpDl", .value =  fill_DRB_UEThpDl }, 
+   {.key = "DRB.UEThpUl", .value =  fill_DRB_UEThpUl }, 
+   {.key = "RRU.PrbTotDl", .value =  fill_RRU_PrbTotDl }, 
+-  {.key = "RRU.PrbTotUl", .value =  fill_RRU_PrbTotUl }, 
++  {.key = "RRU.PrbTotUl", .value =  fill_RRU_PrbTotUl },
++  {.key = "OAI.RlcTxQueuePktsDl", .value = fill_OAI_RlcTxQueuePktsDl }, 
+   {.key = "CARR.PDSCHMCSDist", .value = fill_CARR_PDSCHMCSDist },
+   {.key = "CARR.PUSCHMCSDist", .value = fill_CARR_PUSCHMCSDist },
+ #endif
+diff --git a/openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_dlsch_default_policies.c b/openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_dlsch_default_policies.c
+index b4ed73d..7a9530a 100644
+--- a/openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_dlsch_default_policies.c
++++ b/openair2/LAYER2/NR_MAC_gNB/gNB_scheduler_dlsch_default_policies.c
+@@ -13,6 +13,7 @@
+  */
+ 
+ #include "common/utils/nr/nr_common.h"
++#include "common/utils/LOG/log.h"
+ #include "gNB_scheduler_dlsch_default_policies.h"
+ /*MAC*/
+ #include "NR_MAC_COMMON/nr_mac.h"
+@@ -188,23 +189,68 @@ int nr_dl_proportional_fair(const nr_dl_sched_params_t *params, nr_dl_candidate_
+   const int min_rbSize = 5;
+   int n_scheduled = 0;
+ 
++  /*
++   * DQN Phase-3 RB validation counters.
++   *
++   * Validation only: these counters do not participate in any scheduling
++   * decision.  One log line is emitted for every 1000 DQN-controlled
++   * Phase-3 PF invocations.
++   */
++  static unsigned long long dqn_rb_calls_window = 0;
++
++  static unsigned long long dqn_rb_demand_window[NR_SLICE_COUNT] = {0};
++  static unsigned long long dqn_rb_target_window[NR_SLICE_COUNT] = {0};
++  static unsigned long long dqn_rb_protected_window[NR_SLICE_COUNT] = {0};
++  static unsigned long long dqn_rb_effective_window[NR_SLICE_COUNT] = {0};
++
++  static unsigned long long dqn_rb_pass1_window[NR_SLICE_COUNT] = {0};
++
++  static unsigned long long dqn_rb_protected_used_window[NR_SLICE_COUNT] = {0};
++  static unsigned long long dqn_rb_redistributed_used_window[NR_SLICE_COUNT] = {0};
++
++  static unsigned long long dqn_rb_borrow_window[NR_SLICE_COUNT] = {0};
++
++  static unsigned long long dqn_rb_unknown_borrow_window = 0;
++  static unsigned long long dqn_rb_phase3_committed_window = 0;
++
++  static unsigned int dqn_rb_policy_changes_window = 0;
++  static uint8_t dqn_rb_last_weight[NR_SLICE_COUNT] = {0};
++
++  /*
++   * Capture one coherent DQN policy for the complete PF invocation.
++   *
++   * weight[] = [eMBB, URLLC, mMTC]
++   *
++   * These are relative resource-sharing weights, NOT literal PRB counts.
++   */
++  nr_slice_policy_t slice_policy = {0};
++  nr_slice_manager_snapshot(&params->mac->slice_manager, &slice_policy);
++
+   /* Build pointer array sorted by PF priority (retx first, then highest weight) */
+   nr_dl_candidate_t *order[MAX_MOBILES_PER_GNB];
+   int n_active = 0;
++
+   FOR_EACH_CANDIDATE(cand, candidates, n_candidates)
+   if (!cand->skipped)
+     order[n_active++] = cand;
++
+   qsort(order, n_active, sizeof(*order), compare_dl_pf_rb_ptrs);
+ 
+-  /* Phase 1: HARQ retransmissions (highest priority, exact RBs) */
++  /*
++   * Phase 1: HARQ retransmissions.
++   *
++   * Retransmissions deliberately remain outside DQN slice budgeting.
++   */
+   for (int j = 0; j < n_active; j++) {
+     nr_dl_candidate_t *cand = order[j];
++
+     if (!cand->is_retx)
+       continue;
+ 
+     int needed_rbs = cand->retx_rbSize;
+     uint16_t *vrb_map = params->vrb_map[cand->alloc_beam_idx];
+     int rbStart, rbSize;
++
+     if (!get_rb_alloc(needed_rbs,
+                       cand->bwp_size,
+                       cand->bwp_start,
+@@ -215,17 +261,29 @@ int nr_dl_proportional_fair(const nr_dl_sched_params_t *params, nr_dl_candidate_
+                       &rbSize))
+       continue;
+ 
+-    COMMIT_ALLOC(params, cand, rbStart, needed_rbs, cand->sched_pdsch.mcs, n_scheduled);
++    COMMIT_ALLOC(params,
++                 cand,
++                 rbStart,
++                 needed_rbs,
++                 cand->sched_pdsch.mcs,
++                 n_scheduled);
+   }
+ 
+-  /* Phase 2: No-data UEs (TA command or beam switch MAC CE, no RLC data) */
++  /*
++   * Phase 2: no-RLC-data candidates.
++   *
++   * TA commands / beam-switch MAC CEs also deliberately remain outside
++   * DQN slice budgeting.
++   */
+   for (int j = 0; j < n_active; j++) {
+     nr_dl_candidate_t *cand = order[j];
++
+     if (cand->is_retx || cand->pending_bytes > 0)
+       continue;
+ 
+     uint16_t *vrb_map = params->vrb_map[cand->alloc_beam_idx];
+     int rbStart, rbSize;
++
+     if (!get_rb_alloc(min_rbSize,
+                       cand->bwp_size,
+                       cand->bwp_start,
+@@ -236,38 +294,54 @@ int nr_dl_proportional_fair(const nr_dl_sched_params_t *params, nr_dl_candidate_
+                       &rbSize))
+       continue;
+ 
+-    COMMIT_ALLOC(params, cand, rbStart, min_rbSize, cand->sched_pdsch.mcs, n_scheduled);
++    COMMIT_ALLOC(params,
++                 cand,
++                 rbStart,
++                 min_rbSize,
++                 cand->sched_pdsch.mcs,
++                 n_scheduled);
+   }
+ 
+-  /* BW is the same across all beams, just use beam 0 */
++  /*
++   * The existing OAI policy uses beam-0 bandwidth as the scheduling ceiling.
++   *
++   * Actual feasibility is still determined later by get_rb_alloc(), which
++   * checks the VRB map and candidate TDA symbol mask.
++   */
+   int max_rbSize = params->n_rb_avail[0];
+   DevAssert(max_rbSize >= min_rbSize);
++
+   int n_remain_ue = params->max_num_ue - n_scheduled;
+-  // share RBs fairly between remaining allocatable UEs
+-  int n_rb_per_ue = max(min_rbSize, max_rbSize / n_remain_ue);
+-
+-  /* Phase 3: New data UEs — PF priority order, count number of RBs required,
+-   * store number of excess RBs for UEs. Check two additional UEs in case the
+-   * first ones cannot be allocated (DCI alloc fail). This is only necessary
+-   * because we use type-1 allocation, if we used type-0, we could fix the UEs,
+-   * then iteratively give RBs as needed. */
++
++  if (n_remain_ue <= 0)
++    return n_scheduled;
++
++  /*
++   * Determine Phase-3 RB demand of each PF-ranked candidate.
++   */
+   uint16_t rbs_ue[MAX_MOBILES_PER_GNB] = {0};
+-  int excess_total_rbs = max_rbSize;
+-  for (int j = 0, n = 0; j < n_active && n < n_remain_ue + 2; j++) {
++
++  for (int j = 0; j < n_active; j++) {
+     nr_dl_candidate_t *cand = order[j];
++
+     if (cand->is_retx || cand->pending_bytes == 0)
+       continue;
+ 
+-    // calculate the number of RBs that UE would like to have
+     int mcs = cand->sched_pdsch.mcs;
+     uint8_t Qm = nr_get_Qm_dl(mcs, cand->mcs_table);
+     uint16_t R = nr_get_code_rate_dl(mcs, cand->mcs_table);
+-    NR_pdsch_dmrs_t dmrs = get_dl_dmrs_params(params->mac->common_channels->ServingCellConfigCommon,
+-                                              &cand->UE->current_DL_BWP,
+-                                              &cand->sched_pdsch.tda_info,
+-                                              cand->sched_pdsch.nrOfLayers);
+-    const int oh = 3 * 4 + (cand->UE->UE_sched_ctrl.ta_apply ? 2 : 0);
++
++    NR_pdsch_dmrs_t dmrs =
++        get_dl_dmrs_params(params->mac->common_channels->ServingCellConfigCommon,
++                           &cand->UE->current_DL_BWP,
++                           &cand->sched_pdsch.tda_info,
++                           cand->sched_pdsch.nrOfLayers);
++
++    const int oh =
++        3 * 4 + (cand->UE->UE_sched_ctrl.ta_apply ? 2 : 0);
++
+     uint32_t tbs;
++
+     nr_find_nb_rb(Qm,
+                   R,
+                   1,
+@@ -279,38 +353,542 @@ int nr_dl_proportional_fair(const nr_dl_sched_params_t *params, nr_dl_candidate_
+                   max_rbSize,
+                   &tbs,
+                   &rbs_ue[j]);
+-    if (n < n_remain_ue) {
+-      // for the first n_remain_ue UEs: account number of RBs
+-      // so excess RBs not used by some UEs could be given to others
+-      excess_total_rbs -= min(rbs_ue[j], n_rb_per_ue);
+-      excess_total_rbs = max(excess_total_rbs, 0);
++  }
++
++  const int total_weight =
++      slice_policy.weight[NR_SLICE_EMBB]
++      + slice_policy.weight[NR_SLICE_URLLC]
++      + slice_policy.weight[NR_SLICE_MMTC];
++
++  /*
++   * If no DQN policy is installed, preserve the original OAI PF behavior.
++   *
++   * The all-zero DQN action also has no meaningful relative share. For this
++   * deployment we interpret it as "no slice preference" and fall back to the
++   * normal work-conserving PF allocator instead of intentionally idling RBs.
++   */
++  if (!slice_policy.enabled || total_weight == 0) {
++
++    int n_rb_per_ue =
++        max(min_rbSize, max_rbSize / n_remain_ue);
++
++    int excess_total_rbs = max_rbSize;
++
++    for (int j = 0, n = 0;
++         j < n_active && n < n_remain_ue + 2;
++         j++) {
++
++      nr_dl_candidate_t *cand = order[j];
++
++      if (cand->is_retx ||
++          cand->pending_bytes == 0 ||
++          rbs_ue[j] == 0)
++        continue;
++
++      if (n < n_remain_ue) {
++        excess_total_rbs -=
++            min(rbs_ue[j], n_rb_per_ue);
++
++        excess_total_rbs =
++            max(excess_total_rbs, 0);
++      }
++
++      n++;
+     }
+-    n++;
++
++    for (int j = 0; j < n_active; j++) {
++
++      nr_dl_candidate_t *cand = order[j];
++
++      if (cand->is_retx ||
++          cand->pending_bytes == 0 ||
++          rbs_ue[j] == 0)
++        continue;
++
++      int rb_req =
++          min(rbs_ue[j], n_rb_per_ue);
++
++      int excess_req =
++          max((int)rbs_ue[j] - rb_req, 0);
++
++      if (excess_total_rbs > 0 &&
++          excess_req > 0) {
++
++        int excess_ack =
++            min(excess_total_rbs, excess_req);
++
++        rb_req += excess_ack;
++        excess_total_rbs -= excess_ack;
++      }
++
++      int rbStart, rbSize;
++
++      uint16_t *vrb_map =
++          params->vrb_map[cand->alloc_beam_idx];
++
++      if (!get_rb_alloc(min_rbSize,
++                        rb_req,
++                        cand->bwp_start,
++                        cand->bwp_size,
++                        vrb_map,
++                        cand->alloc_slbitmap,
++                        &rbStart,
++                        &rbSize))
++        continue;
++
++      COMMIT_ALLOC(params,
++                   cand,
++                   rbStart,
++                   rbSize,
++                   cand->sched_pdsch.mcs,
++                   n_scheduled);
++    }
++
++    return n_scheduled;
++  }
++
++  /*
++   * --------------------------------------------------------------
++   * DQN WORK-CONSERVING PHASE-3 POLICY
++   * --------------------------------------------------------------
++   *
++   * 1. Derive protected shares from DQN weights.
++   * 2. Cap each share by actual slice demand.
++   * 3. Put unused capacity in a common pool.
++   * 4. Redistribute that pool to slices that remain backlogged.
++   *
++   * Therefore a high URLLC weight protects URLLC when it is busy,
++   * but idle URLLC capacity never has to remain permanently reserved.
++   */
++
++  /*
++   * Flush the previous complete measurement window before accounting the
++   * current invocation. This also means early returns later in the function
++   * cannot lose already committed RB accounting.
++   */
++  if (dqn_rb_calls_window >= 1000) {
++
++    LOG_I(NR_MAC,
++          "[DQN RB VALID] calls=%llu policy_changes=%u "
++          "last_weight=[%u,%u,%u] "
++          "demand=[%llu,%llu,%llu] "
++          "target=[%llu,%llu,%llu] "
++          "protected=[%llu,%llu,%llu] "
++          "effective=[%llu,%llu,%llu] "
++          "pass1=[%llu,%llu,%llu] "
++          "protected_used=[%llu,%llu,%llu] "
++          "redistributed_used=[%llu,%llu,%llu] "
++          "borrow=[%llu,%llu,%llu] "
++          "unknown_borrow=%llu phase3_committed=%llu\n",
++          dqn_rb_calls_window,
++          dqn_rb_policy_changes_window,
++          dqn_rb_last_weight[NR_SLICE_EMBB],
++          dqn_rb_last_weight[NR_SLICE_URLLC],
++          dqn_rb_last_weight[NR_SLICE_MMTC],
++          dqn_rb_demand_window[NR_SLICE_EMBB],
++          dqn_rb_demand_window[NR_SLICE_URLLC],
++          dqn_rb_demand_window[NR_SLICE_MMTC],
++          dqn_rb_target_window[NR_SLICE_EMBB],
++          dqn_rb_target_window[NR_SLICE_URLLC],
++          dqn_rb_target_window[NR_SLICE_MMTC],
++          dqn_rb_protected_window[NR_SLICE_EMBB],
++          dqn_rb_protected_window[NR_SLICE_URLLC],
++          dqn_rb_protected_window[NR_SLICE_MMTC],
++          dqn_rb_effective_window[NR_SLICE_EMBB],
++          dqn_rb_effective_window[NR_SLICE_URLLC],
++          dqn_rb_effective_window[NR_SLICE_MMTC],
++          dqn_rb_pass1_window[NR_SLICE_EMBB],
++          dqn_rb_pass1_window[NR_SLICE_URLLC],
++          dqn_rb_pass1_window[NR_SLICE_MMTC],
++          dqn_rb_protected_used_window[NR_SLICE_EMBB],
++          dqn_rb_protected_used_window[NR_SLICE_URLLC],
++          dqn_rb_protected_used_window[NR_SLICE_MMTC],
++          dqn_rb_redistributed_used_window[NR_SLICE_EMBB],
++          dqn_rb_redistributed_used_window[NR_SLICE_URLLC],
++          dqn_rb_redistributed_used_window[NR_SLICE_MMTC],
++          dqn_rb_borrow_window[NR_SLICE_EMBB],
++          dqn_rb_borrow_window[NR_SLICE_URLLC],
++          dqn_rb_borrow_window[NR_SLICE_MMTC],
++          dqn_rb_unknown_borrow_window,
++          dqn_rb_phase3_committed_window);
++
++    dqn_rb_calls_window = 0;
++    dqn_rb_policy_changes_window = 0;
++    dqn_rb_unknown_borrow_window = 0;
++    dqn_rb_phase3_committed_window = 0;
++
++    for (int sid = 0; sid < NR_SLICE_COUNT; sid++) {
++      dqn_rb_demand_window[sid] = 0;
++      dqn_rb_target_window[sid] = 0;
++      dqn_rb_protected_window[sid] = 0;
++      dqn_rb_effective_window[sid] = 0;
++      dqn_rb_pass1_window[sid] = 0;
++      dqn_rb_protected_used_window[sid] = 0;
++      dqn_rb_redistributed_used_window[sid] = 0;
++      dqn_rb_borrow_window[sid] = 0;
++    }
++  }
++
++  if (dqn_rb_calls_window == 0) {
++
++    for (int sid = 0; sid < NR_SLICE_COUNT; sid++)
++      dqn_rb_last_weight[sid] = slice_policy.weight[sid];
++
++  } else if (dqn_rb_last_weight[NR_SLICE_EMBB] != slice_policy.weight[NR_SLICE_EMBB] ||
++             dqn_rb_last_weight[NR_SLICE_URLLC] != slice_policy.weight[NR_SLICE_URLLC] ||
++             dqn_rb_last_weight[NR_SLICE_MMTC] != slice_policy.weight[NR_SLICE_MMTC]) {
++
++    dqn_rb_policy_changes_window++;
++
++    for (int sid = 0; sid < NR_SLICE_COUNT; sid++)
++      dqn_rb_last_weight[sid] = slice_policy.weight[sid];
+   }
+ 
+-  /* allocate up to all UEs checked above */
++  dqn_rb_calls_window++;
++
++  int slice_demand[NR_SLICE_COUNT] = {0};
++  int slice_candidates[NR_SLICE_COUNT] = {0};
++
+   for (int j = 0; j < n_active; j++) {
++
+     nr_dl_candidate_t *cand = order[j];
+-    if (cand->is_retx || cand->pending_bytes == 0 || rbs_ue[j] == 0)
++
++    if (cand->is_retx ||
++        cand->pending_bytes == 0 ||
++        rbs_ue[j] == 0)
++      continue;
++
++    nr_slice_id_t sid =
++        nr_slice_manager_classify(cand->nssai);
++
++    if (sid == NR_SLICE_UNKNOWN)
+       continue;
+ 
+-    // give every UE its chunk of data. If total_rbs indicates excess RBs, give
+-    // additionally as appropriate.
+-    int rb_req = min(rbs_ue[j], n_rb_per_ue);
+-    int excess_req = max(rbs_ue[j] - rb_req, 0);
+-    if (excess_total_rbs > 0 && excess_req > 0) {
+-      int excess_ack = min(excess_total_rbs, excess_req);
+-      rb_req += excess_ack;
+-      excess_total_rbs -= excess_ack;
+-      DevAssert(excess_total_rbs >= 0);
++    slice_demand[sid] += rbs_ue[j];
++    slice_candidates[sid]++;
++  }
++
++  for (int sid = 0; sid < NR_SLICE_COUNT; sid++)
++    dqn_rb_demand_window[sid] += slice_demand[sid];
++
++  /*
++   * Initial weighted shares using largest-remainder integer rounding.
++   */
++  int slice_budget[NR_SLICE_COUNT] = {0};
++  int remainder[NR_SLICE_COUNT] = {0};
++  int assigned = 0;
++
++  for (int sid = 0; sid < NR_SLICE_COUNT; sid++) {
++
++    int product =
++        max_rbSize * slice_policy.weight[sid];
++
++    slice_budget[sid] =
++        product / total_weight;
++
++    remainder[sid] =
++        product % total_weight;
++
++    assigned += slice_budget[sid];
++  }
++
++  int residual =
++      max_rbSize - assigned;
++
++  while (residual > 0) {
++
++    int best = -1;
++
++    for (int sid = 0; sid < NR_SLICE_COUNT; sid++) {
++
++      if (slice_policy.weight[sid] == 0)
++        continue;
++
++      if (best < 0 ||
++          remainder[sid] > remainder[best])
++        best = sid;
++    }
++
++    if (best < 0)
++      break;
++
++    slice_budget[best]++;
++    remainder[best] = -1;
++    residual--;
++  }
++
++  /*
++   * Record the original DQN-derived integer RB target before demand capping.
++   */
++  for (int sid = 0; sid < NR_SLICE_COUNT; sid++)
++    dqn_rb_target_window[sid] += slice_budget[sid];
++
++  /*
++   * A slice cannot consume more than its current Phase-3 demand.
++   * Anything it does not need immediately returns to the common pool.
++   */
++  int common_pool = 0;
++
++  for (int sid = 0; sid < NR_SLICE_COUNT; sid++) {
++
++    if (slice_budget[sid] > slice_demand[sid]) {
++
++      common_pool +=
++          slice_budget[sid] - slice_demand[sid];
++
++      slice_budget[sid] =
++          slice_demand[sid];
++    }
++  }
++
++  /*
++   * This is the demand-capped protected budget, before any common-pool
++   * redistribution.
++   *
++   * Keep a per-invocation copy so successful first-pass allocations can be
++   * split precisely into protected use versus redistributed common-pool use.
++   */
++  int slice_protected_budget[NR_SLICE_COUNT];
++
++  for (int sid = 0; sid < NR_SLICE_COUNT; sid++) {
++    slice_protected_budget[sid] = slice_budget[sid];
++    dqn_rb_protected_window[sid] += slice_budget[sid];
++  }
++
++  /*
++   * First redistribute the common pool among positive-weight slices that
++   * remain backlogged. Weighted round-robin approximates the DQN proportions
++   * while remaining deterministic and integer-only.
++   */
++  while (common_pool > 0) {
++
++    bool progress = false;
++
++    for (int sid = 0;
++         sid < NR_SLICE_COUNT && common_pool > 0;
++         sid++) {
++
++      int tickets =
++          slice_policy.weight[sid];
++
++      if (tickets == 0)
++        continue;
++
++      for (int k = 0;
++           k < tickets &&
++           common_pool > 0 &&
++           slice_budget[sid] < slice_demand[sid];
++           k++) {
++
++        slice_budget[sid]++;
++        common_pool--;
++        progress = true;
++      }
++    }
++
++    if (!progress)
++      break;
++  }
++
++  /*
++   * If all positive-weight demand has already been satisfied, zero-weight
++   * slices may borrow truly unused capacity instead of leaving radio
++   * resources idle.
++   */
++  while (common_pool > 0) {
++
++    bool progress = false;
++
++    for (int sid = 0;
++         sid < NR_SLICE_COUNT && common_pool > 0;
++         sid++) {
++
++      if (slice_budget[sid] >= slice_demand[sid])
++        continue;
++
++      slice_budget[sid]++;
++      common_pool--;
++      progress = true;
+     }
++
++    if (!progress)
++      break;
++  }
++
++  /*
++   * Final effective Phase-3 slice budget after all common-pool
++   * redistribution.
++   */
++  for (int sid = 0; sid < NR_SLICE_COUNT; sid++)
++    dqn_rb_effective_window[sid] += slice_budget[sid];
++
++  /*
++   * Allocate the final work-conserving per-slice budgets.
++   *
++   * Candidates remain in PF order. Within each slice, the remaining slice
++   * budget is shared over the candidates still waiting in that slice.
++   */
++  int slice_used[NR_SLICE_COUNT] = {0};
++  int slice_left[NR_SLICE_COUNT];
++
++  for (int sid = 0; sid < NR_SLICE_COUNT; sid++)
++    slice_left[sid] = slice_candidates[sid];
++
++  for (int j = 0; j < n_active; j++) {
++
++    nr_dl_candidate_t *cand = order[j];
++
++    if (cand->is_retx ||
++        cand->pending_bytes == 0 ||
++        rbs_ue[j] == 0)
++      continue;
++
++    nr_slice_id_t sid =
++        nr_slice_manager_classify(cand->nssai);
++
++    /*
++     * Unknown S-NSSAI is handled only after all mapped slices have received
++     * their protected/borrowed opportunity.
++     */
++    if (sid == NR_SLICE_UNKNOWN)
++      continue;
++
++    int remaining =
++        slice_budget[sid] - slice_used[sid];
++
++    int peers =
++        max(slice_left[sid], 1);
++
++    slice_left[sid]--;
++
++    if (remaining < min_rbSize)
++      continue;
++
++    int fair_share =
++        max(min_rbSize, remaining / peers);
++
++    int rb_req =
++        min((int)rbs_ue[j],
++            min(remaining, fair_share));
++
++    if (rb_req < min_rbSize)
++      continue;
++
+     int rbStart, rbSize;
+-    uint16_t *vrb_map = params->vrb_map[cand->alloc_beam_idx];
+-    if (!get_rb_alloc(min_rbSize, rb_req, cand->bwp_start, cand->bwp_size, vrb_map, cand->alloc_slbitmap, &rbStart, &rbSize))
++
++    uint16_t *vrb_map =
++        params->vrb_map[cand->alloc_beam_idx];
++
++    if (!get_rb_alloc(min_rbSize,
++                      rb_req,
++                      cand->bwp_start,
++                      cand->bwp_size,
++                      vrb_map,
++                      cand->alloc_slbitmap,
++                      &rbStart,
++                      &rbSize))
+       continue;
+ 
+-    int mcs = cand->sched_pdsch.mcs;
+-    COMMIT_ALLOC(params, cand, rbStart, rbSize, mcs, n_scheduled);
++    /*
++     * Do not use COMMIT_ALLOC here because that macro may return from this
++     * function before slice_used[] is updated for the final scheduled UE.
++     */
++    cand->sched_pdsch.alloc_type = PDSCH_TYPE1;
++    cand->sched_pdsch.rbStart = rbStart;
++    cand->sched_pdsch.rbSize = rbSize;
++
++    if (!commit_alloc(params, cand))
++      continue;
++
++    cand->scheduled = true;
++
++    const int used_before = slice_used[sid];
++    const int protected_remaining =
++        max(slice_protected_budget[sid] - used_before, 0);
++
++    const int protected_piece =
++        min(rbSize, protected_remaining);
++
++    const int redistributed_piece =
++        rbSize - protected_piece;
++
++    slice_used[sid] += rbSize;
++
++    dqn_rb_pass1_window[sid] += rbSize;
++    dqn_rb_protected_used_window[sid] += protected_piece;
++    dqn_rb_redistributed_used_window[sid] += redistributed_piece;
++    dqn_rb_phase3_committed_window += rbSize;
++
++    n_scheduled++;
++
++    if (n_scheduled >= params->max_num_ue)
++      return n_scheduled;
++  }
++
++  /*
++   * Final work-conserving borrowing pass.
++   *
++   * Every mapped slice has already received its DQN-controlled opportunity.
++   * Any candidate that is still unscheduled may now borrow whatever physical
++   * RB capacity remains available.
++   *
++   * Candidates are still visited in the same global PF order, so unused
++   * capacity is redistributed according to the existing OAI PF priority.
++   *
++   * This includes:
++   *   - mapped slices whose protected share was insufficient,
++   *   - mapped slices that could not fully use their first-pass share because
++   *     of VRB/TDA/CCE/PUCCH constraints,
++   *   - unknown/unclassified S-NSSAI candidates.
++   */
++  for (int j = 0; j < n_active; j++) {
++
++    nr_dl_candidate_t *cand = order[j];
++
++    if (cand->scheduled ||
++        cand->is_retx ||
++        cand->pending_bytes == 0 ||
++        rbs_ue[j] == 0)
++      continue;
++
++    int rbStart, rbSize;
++
++    uint16_t *vrb_map =
++        params->vrb_map[cand->alloc_beam_idx];
++
++    if (!get_rb_alloc(min_rbSize,
++                      rbs_ue[j],
++                      cand->bwp_start,
++                      cand->bwp_size,
++                      vrb_map,
++                      cand->alloc_slbitmap,
++                      &rbStart,
++                      &rbSize))
++      continue;
++
++    cand->sched_pdsch.alloc_type = PDSCH_TYPE1;
++    cand->sched_pdsch.rbStart = rbStart;
++    cand->sched_pdsch.rbSize = rbSize;
++
++    if (!commit_alloc(params, cand))
++      continue;
++
++    cand->scheduled = true;
++
++    nr_slice_id_t borrow_sid =
++        nr_slice_manager_classify(cand->nssai);
++
++    if (borrow_sid >= 0 && borrow_sid < NR_SLICE_COUNT)
++      dqn_rb_borrow_window[borrow_sid] += rbSize;
++    else
++      dqn_rb_unknown_borrow_window += rbSize;
++
++    dqn_rb_phase3_committed_window += rbSize;
++
++    n_scheduled++;
++
++    if (n_scheduled >= params->max_num_ue)
++      return n_scheduled;
+   }
+ 
+   return n_scheduled;
+diff --git a/openair2/LAYER2/NR_MAC_gNB/main.c b/openair2/LAYER2/NR_MAC_gNB/main.c
+index cac1ef6..148f008 100644
+--- a/openair2/LAYER2/NR_MAC_gNB/main.c
++++ b/openair2/LAYER2/NR_MAC_gNB/main.c
+@@ -269,6 +269,17 @@ void mac_top_init_gNB(ngran_node_t node_type,
+       LOG_D(MAC,"[MAIN] ALLOCATE %zu Bytes for %d gNB_MAC_INST @ %p\n",sizeof(gNB_MAC_INST), RC.nb_nr_macrlc_inst, RC.mac);
+ 
+       bzero(RC.nrmac[i], sizeof(gNB_MAC_INST));
++
++      /*
++       * Initialize DQN-driven slice-policy state.
++       *
++       * Enforcement starts disabled, therefore this does not alter the
++       * normal OAI scheduler until a valid policy arrives through E2.
++       *
++       * This is intentionally independent of RFsim/UHD/USRP.
++       */
++      nr_slice_manager_init(&RC.nrmac[i]->slice_manager);
++
+       nr_mac_pcch_queue_init(&RC.nrmac[i]->common_channels[0]);
+ 
+       RC.nrmac[i]->Mod_id = i;
+diff --git a/openair2/LAYER2/NR_MAC_gNB/nr_mac_gNB.h b/openair2/LAYER2/NR_MAC_gNB/nr_mac_gNB.h
+index d9c0f00..32efb06 100644
+--- a/openair2/LAYER2/NR_MAC_gNB/nr_mac_gNB.h
++++ b/openair2/LAYER2/NR_MAC_gNB/nr_mac_gNB.h
+@@ -66,6 +66,7 @@
+ /* MAC */
+ #include "LAYER2/NR_MAC_COMMON/nr_mac_common.h"
+ #include "LAYER2/NR_MAC_gNB/mac_config.h"
++#include "NR_MAC_gNB/nr_slice_manager.h"
+ #include "NR_TAG.h"
+ 
+ /* Defs */
+@@ -1279,6 +1280,12 @@ typedef struct gNB_MAC_INST_s {
+   nr_ul_mcs_select_fn ul_mcs_select;
+   nr_ul_rb_alloc_fn ul_rb_alloc;
+ 
++  /// Runtime DQN-driven network-slice policy.
++  ///
++  /// This state is RF-backend independent: the same MAC policy is used
++  /// with RFsim during development and UHD/USRP during hardware deployment.
++  nr_slice_manager_t slice_manager;
++
+   /// Optional state persistence for scheduling policies.
+   void *sched_stateful_data;
+ 
+diff --git a/openair2/LAYER2/nr_rlc/nr_rlc_entity.h b/openair2/LAYER2/nr_rlc/nr_rlc_entity.h
+index cb9761a..763ef78 100644
+--- a/openair2/LAYER2/nr_rlc/nr_rlc_entity.h
++++ b/openair2/LAYER2/nr_rlc/nr_rlc_entity.h
+@@ -33,7 +33,7 @@ typedef struct {
+   uint32_t txpdu_status_pkts;  /* aggregated number of tx status pdus/pkts (only applicable to RLC AM) */
+   uint32_t txpdu_status_bytes; /* aggregated amount of tx status bytes  (only applicable to RLC AM) */
+   uint32_t txbuf_occ_bytes;    /* (IMPLEMENTED) transmitting bytes currently in buffer */
+-  uint32_t txbuf_occ_pkts;     /* TODO: current tx buffer occupancy in terms of number of packets (average: NOT IMPLEMENTED) */
++  uint32_t txbuf_occ_pkts;     /* current number of SDUs waiting in the TX queue for first transmission */
+   /* txbuf_wd_ms: the time window for which the txbuf  occupancy value is obtained - NOT IMPLEMENTED */
+ 
+   /* RX */
+diff --git a/openair2/LAYER2/nr_rlc/nr_rlc_entity_am.c b/openair2/LAYER2/nr_rlc/nr_rlc_entity_am.c
+index 62c1fa9..439bbd1 100644
+--- a/openair2/LAYER2/nr_rlc/nr_rlc_entity_am.c
++++ b/openair2/LAYER2/nr_rlc/nr_rlc_entity_am.c
+@@ -1707,6 +1707,10 @@ static int generate_tx_pdu(nr_rlc_entity_am_t *entity, char *buffer, int size)
+     /* update buffer status */
+     entity->common.bstatus.tx_size += compute_pdu_header_size(entity, next_sdu)
+                                       + next_sdu->size;
++  } else {
++    AssertFatal(entity->common.stats.txbuf_occ_pkts > 0,
++                "RLC AM txbuf_occ_pkts underflow\n");
++    entity->common.stats.txbuf_occ_pkts--;
+   }
+ 
+   /* put SDU/SDU segment in the wait list */
+@@ -1845,6 +1849,10 @@ void nr_rlc_entity_am_recv_sdu(nr_rlc_entity_t *_entity,
+ 
+   nr_rlc_sdu_segment_list_append(&entity->tx_list, &entity->tx_end, sdu);
+ 
++  /* Number of original SDUs still waiting for first transmission.
++   * This is used as the slice-load state for the verified DQN. */
++  entity->common.stats.txbuf_occ_pkts++;
++
+   /* update buffer status */
+   entity->common.bstatus.tx_size += compute_pdu_header_size(entity, sdu)
+                                     + sdu->size;
+@@ -2033,6 +2041,10 @@ void nr_rlc_entity_am_discard_sdu(nr_rlc_entity_t *_entity, int sdu_id)
+ 
+   entity->tx_size -= cur->sdu->size;
+ 
++  AssertFatal(entity->common.stats.txbuf_occ_pkts > 0,
++              "RLC AM txbuf_occ_pkts underflow on discard\n");
++  entity->common.stats.txbuf_occ_pkts--;
++
+   /* Uncomment to assert if SDU are ever discarded */
+   // assert(0 != 0 && "[RLC-TRAP] SDU discard should never be reached!");
+ 
+@@ -2082,6 +2094,7 @@ static void clear_entity(nr_rlc_entity_am_t *entity)
+ 
+   entity->common.bstatus.tx_size   = 0;
+   entity->common.bstatus.retx_size = 0;
++  entity->common.stats.txbuf_occ_pkts = 0;
+ }
+ 
+ void nr_rlc_entity_am_reestablishment(nr_rlc_entity_t *_entity)
+diff --git a/openair2/LAYER2/nr_rlc/nr_rlc_oai_api.c b/openair2/LAYER2/nr_rlc/nr_rlc_oai_api.c
+index 348c489..f549517 100644
+--- a/openair2/LAYER2/nr_rlc/nr_rlc_oai_api.c
++++ b/openair2/LAYER2/nr_rlc/nr_rlc_oai_api.c
+@@ -273,7 +273,9 @@ static mac_rlc_status_resp_t _nr_rlc_status_ind(nr_rlc_ue_t *ue, frame_t frame,
+     ret.bytes_in_buffer = 0;
+   }
+ 
+-  ret.pdus_in_buffer = 0;
++  /* Export queued original SDUs waiting for first transmission.
++   * Used as the packet-load state for the verified DQN. */
++  ret.pdus_in_buffer = rb != NULL ? rb->stats.txbuf_occ_pkts : 0;
+   /* TODO: creation time may be important (unit: frame, as it seems) */
+   ret.head_sdu_creation_time = 0;
+   ret.head_sdu_remaining_size_to_send = 0;
+diff --git a/targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.fr1.106PRB.usrpb210.conf b/targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.fr1.106PRB.usrpb210.conf
+index 0f8d688..85ca9b9 100644
+--- a/targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.fr1.106PRB.usrpb210.conf
++++ b/targets/PROJECTS/GENERIC-NR-5GC/CONF/gnb.sa.band78.fr1.106PRB.usrpb210.conf
+@@ -12,8 +12,17 @@ gNBs =
+     gNB_name  =  "gNB-OAI";
+ 
+     // Tracking area code, 0x0000 and 0xfffe are reserved values
+-    tracking_area_code  =  1;
+-    plmn_list = ({ mcc = 001; mnc = 01; mnc_length = 2; snssaiList = ({ sst = 1; }) });
++    tracking_area_code  =  0xa000;
++    plmn_list = ({
++  	mcc = 001;
++ 	mnc = 01;
++  	mnc_length = 2;
++  	snssaiList = (
++    		{ sst = 1; sd = 0x000001; },
++    		{ sst = 2; sd = 0x000002; },
++    		{ sst = 3; sd = 0x000003; }
++  	);
++     });
+ 
+     nr_cellid = 12345678L;
+ 
+@@ -157,7 +166,7 @@ gNBs =
+ 
+ 
+     ////////// AMF parameters:
+-    amf_ip_address = ({ ipv4 = "192.168.70.132"; });
++    amf_ip_address = ({ ipv4 = "192.168.70.137"; });
+ 
+ 
+     NETWORK_INTERFACES :

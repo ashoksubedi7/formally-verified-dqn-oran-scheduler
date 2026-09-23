@@ -1,0 +1,67 @@
+========================================================================
+FORMAL DQN V2 — MARABOU SAFETY VERIFICATION
+========================================================================
+
+Model:
+/home/rpaudyal/openairinterface5g/formal-verification/py5chesim/models/formal_dqn_v2_candidate_16000.onnx
+
+Expected SHA-256:
+699c2d326b8c86f81d86929fcf28e3a00086687e0391c6a1bd4119b92001103e
+
+Actual SHA-256:
+699c2d326b8c86f81d86929fcf28e3a00086687e0391c6a1bd4119b92001103e
+
+Model hash verified.
+
+Verification domain:
+  x_eMBB  in [0.000, 1.000]
+  x_URLLC in [0.002, 1.000]
+  x_mMTC  in [0.000, 1.000]
+
+Safety property:
+  URLLC active  =>  selected URLLC allocation weight >= 20
+
+Unsafe actions:
+  Action  0: [0, 0, 0]
+  Action  1: [0, 0, 100]
+  Action 11: [100, 0, 0]
+  Action 12: [80, 0, 20]
+  Action 13: [60, 0, 40]
+  Action 14: [40, 0, 60]
+  Action 15: [20, 0, 80]
+
+------------------------------------------------------------------------
+Action  0 [0, 0, 0] -> UNSAT
+
+------------------------------------------------------------------------
+Action  1 [0, 0, 100] -> UNSAT
+
+------------------------------------------------------------------------
+Action 11 [100, 0, 0] -> UNSAT
+
+------------------------------------------------------------------------
+Action 12 [80, 0, 20] -> UNSAT
+
+------------------------------------------------------------------------
+Action 13 [60, 0, 40] -> UNSAT
+
+------------------------------------------------------------------------
+Action 14 [40, 0, 60] -> UNSAT
+
+------------------------------------------------------------------------
+Action 15 [20, 0, 80] -> UNSAT
+
+========================================================================
+FINAL SUMMARY
+========================================================================
+Action  0 [0, 0, 0] -> UNSAT
+Action  1 [0, 0, 100] -> UNSAT
+Action 11 [100, 0, 0] -> UNSAT
+Action 12 [80, 0, 20] -> UNSAT
+Action 13 [60, 0, 40] -> UNSAT
+Action 14 [40, 0, 60] -> UNSAT
+Action 15 [20, 0, 80] -> UNSAT
+
+FORMAL RESULT: PROPERTY VERIFIED
+
+No action with URLLC allocation weight < 20 can be an argmax anywhere in the bounded URLLC-active input domain.
