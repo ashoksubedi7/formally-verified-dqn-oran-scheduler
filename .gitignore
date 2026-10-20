@@ -46,3 +46,4 @@ Thumbs.db
 *.key
 credentials*
 secrets*
+.venv-verification/

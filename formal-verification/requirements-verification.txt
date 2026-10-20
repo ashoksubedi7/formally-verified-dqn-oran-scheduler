@@ -1,0 +1,4 @@
+maraboupy==2.0.0
+numpy==2.2.6
+onnx==1.23.2
+onnxruntime==1.23.2

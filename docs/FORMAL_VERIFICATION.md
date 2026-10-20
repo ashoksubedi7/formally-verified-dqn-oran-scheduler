@@ -1,6 +1,6 @@
 # Formal Verification of the DQN Scheduling Policy
 
-## 1. Purpose
+1. Purpose
 
 This project uses formal verification to establish a safety property of the
 frozen Deep Q-Network (DQN) scheduling policy before deploying the model in
@@ -10,15 +10,17 @@ The formal analysis applies specifically to the neural-network decision
 policy.
 
 It does not constitute a formal proof of the complete OpenAirInterface,
-FlexRIC, E2, MAC scheduler, or radio system. Those components are evaluated
-separately through runtime and experimental validation.
+FlexRIC, E2, MAC scheduler, or radio system.
 
-## 2. Verified Model
+Those components are evaluated separately through runtime and experimental
+validation.
+
+2. Verified Model
 
 The formally verified and deployed model is:
 
 ```text
-formal_dqn_v2_candidate_16000.onnx
+models/formal_dqn_v2_candidate_16000.onnx
 ```
 
 The SHA-256 hash of the verified ONNX model is:
@@ -27,18 +29,17 @@ The SHA-256 hash of the verified ONNX model is:
 699c2d326b8c86f81d86929fcf28e3a00086687e0391c6a1bd4119b92001103e
 ```
 
-The verification script computes the model hash before verification and
-compares it against the expected value.
+The Python verification script computes the model hash before verification
+and compares it against the expected value.
 
 If the hash differs, verification is aborted.
 
-This ensures that the formal result is associated with the exact frozen
-model artifact that was verified.
+This associates the formal result with the exact frozen model artifact that
+was verified.
 
-## 3. Model Interface
+3. Model Interface
 
-The DQN receives three normalized inputs representing the queue load of the
-three network slices:
+The DQN receives three normalized inputs:
 
 ```text
 x0 = eMBB
@@ -52,7 +53,7 @@ The model produces 22 output Q-values:
 Q0, Q1, ..., Q21
 ```
 
-The selected action is determined by the largest Q-value:
+The selected action is determined by:
 
 ```text
 a* = argmax(Q0, Q1, ..., Q21)
@@ -60,7 +61,7 @@ a* = argmax(Q0, Q1, ..., Q21)
 
 Each output corresponds to one predefined resource-weight vector.
 
-## 4. Action Space
+4. Action Space
 
 Each action has the form:
 
@@ -95,7 +96,7 @@ The complete action space is:
 | 20 | 40 | 20 | 40 |
 | 21 | 20 | 40 | 40 |
 
-## 5. Safety Requirement
+5. Safety Requirement
 
 The safety requirement concerns active URLLC traffic.
 
@@ -123,12 +124,17 @@ w_URLLC(a*) >= 20
 
 where `a*` is the action selected by the DQN.
 
-In words:
+In plain language:
 
-> Whenever URLLC has at least one queued packet in the verified state domain,
-> the selected DQN action must assign URLLC a weight of at least 20.
+Whenever URLLC has at least one queued packet in the verified state domain,
+the selected DQN action must assign URLLC a scheduling weight of at least 20.
 
-## 6. Normalized Verification Domain
+The value 20 is a scheduling weight.
+
+It is not a claim that URLLC receives exactly 20 PRBs or exactly 20 percent
+of the available radio resources.
+
+6. Normalized Verification Domain
 
 The DQN operates on normalized queue values.
 
@@ -148,13 +154,18 @@ The minimum active URLLC value is:
 1 / 500 = 0.002
 ```
 
-Therefore `x_URLLC = 0.002` represents the smallest non-zero URLLC queue
-value in the verified domain.
+Therefore:
 
-## 7. Unsafe Actions
+```text
+x_URLLC = 0.002
+```
+
+represents the smallest non-zero URLLC queue value in the verified domain.
+
+7. Unsafe Actions
 
 An action is unsafe with respect to the verified property when its URLLC
-weight is less than 20.
+weight is below 20.
 
 The unsafe actions are:
 
@@ -168,42 +179,95 @@ Action 14 -> [40,  0,  60]
 Action 15 -> [20,  0,  80]
 ```
 
-Formal verification therefore checks whether any of these seven actions can
-be selected anywhere in the URLLC-active input domain.
-
-## 8. Counterexample Search
-
-For each unsafe action `u`, Marabou searches for an admissible input state
-for which that unsafe action can be an argmax.
-
-The condition is:
+The unsafe-action set is:
 
 ```text
-Q_u >= Q_j
+U = {0, 1, 11, 12, 13, 14, 15}
 ```
 
-for every other output:
+8. Formal Property
+
+Let:
+
+```text
+f : R^3 -> R^22
+```
+
+be the frozen DQN, with:
+
+```text
+x = (x_eMBB, x_URLLC, x_mMTC)
+```
+
+and outputs:
+
+```text
+f(x) = (Q0(x), Q1(x), ..., Q21(x))
+```
+
+The selected action is:
+
+```text
+a*(x) = argmax_i Qi(x)
+```
+
+The verified domain is:
+
+```text
+X = [0,1] x [0.002,1] x [0,1]
+```
+
+The safety property is:
+
+```text
+For every x in X:
+
+a*(x) is not in U
+```
+
+Equivalently:
+
+```text
+For every x in X:
+
+w_URLLC(a*(x)) >= 20
+```
+
+9. Counterexample Query
+
+For every unsafe action `u`, Marabou searches for an input in the verified
+domain where that unsafe action can be an argmax.
+
+The counterexample condition is:
+
+```text
+Q_u(x) >= Q_j(x)
+```
+
+for every:
 
 ```text
 j != u
 ```
 
-The verification script encodes this using:
+Therefore the query for unsafe action `u` is:
 
 ```text
-Q_j - Q_u <= 0
+exists x in X such that
+
+Q_u(x) >= Q_j(x)
+
+for all j != u
 ```
 
-for every `j != u`.
-
-If such a state exists, the query is satisfiable and represents a
-counterexample to the safety property.
+If such a state exists, the query is SAT and represents a counterexample to
+the property.
 
 If no such state exists, the query is UNSAT.
 
-## 9. Conservative Treatment of Ties
+10. Conservative Treatment of Ties
 
-The verification query uses:
+The formal query uses:
 
 ```text
 Q_u >= Q_j
@@ -215,47 +279,194 @@ rather than:
 Q_u > Q_j
 ```
 
-This is important because a state where an unsafe action merely ties for
-the maximum Q-value is also treated as potentially unsafe.
+This means a state where an unsafe action ties for the maximum Q-value is
+also treated as potentially unsafe.
 
-Therefore the formal query conservatively includes ties.
+The verification is therefore conservative with respect to ties.
 
-An UNSAT result means that an unsafe action cannot even tie for the maximum
+An UNSAT result means the unsafe action cannot even tie for the maximum
 Q-value anywhere in the verified domain.
 
-## 10. Marabou Verification Procedure
+11. Verification Tools
 
-For each unsafe action, the verification script performs the following
-steps:
-
-1. Load the frozen ONNX model.
-2. Verify the model SHA-256 hash.
-3. Apply the bounded three-dimensional input domain.
-4. Add constraints requiring the unsafe action to be an argmax.
-5. Invoke Marabou.
-6. Classify the result as SAT, UNSAT, or TIMEOUT.
-
-The verifier uses a timeout of 300 seconds for each unsafe-action query.
-
-The interpretation is:
+The current reproducible verification environment uses:
 
 ```text
-SAT
-    Counterexample exists.
-
-UNSAT
-    Unsafe action cannot be maximal.
-
-TIMEOUT
-    The property is not established for that action.
+maraboupy==2.0.0
+numpy==2.2.6
+onnx==1.23.2
+onnxruntime==1.23.2
 ```
 
-The global safety property is considered verified only if every unsafe
-action returns UNSAT.
+The Marabou executable reports:
 
-## 11. Verification Results
+```text
+Marabou version 2.0.0 [HEAD 215828c]
+```
 
-The recorded results were:
+The tested Python environment is:
+
+```text
+Python 3.10
+```
+
+12. Installation
+
+From the repository root:
+
+```bash
+python3 -m venv .venv-verification
+source .venv-verification/bin/activate
+```
+
+Install the verification dependencies:
+
+```bash
+python -m pip install --upgrade pip
+python -m pip install -r formal-verification/requirements-verification.txt
+```
+
+Check Marabou:
+
+```bash
+Marabou --version
+```
+
+13. Python API Verification
+
+The Python verifier is:
+
+```text
+formal-verification/py5chesim/verify_formal_dqn_v2.py
+```
+
+Run:
+
+```bash
+python formal-verification/py5chesim/verify_formal_dqn_v2.py
+```
+
+The script:
+
+1. identifies the authoritative ONNX model;
+2. computes its SHA-256 hash;
+3. compares the hash against the expected model identity;
+4. defines the bounded input domain;
+5. identifies all unsafe actions;
+6. constructs one counterexample query per unsafe action;
+7. invokes Marabou;
+8. reports SAT, UNSAT, or TIMEOUT.
+
+A timeout of:
+
+```text
+300 seconds
+```
+
+is used per unsafe-action query.
+
+14. VNN-LIB Verification
+
+The assignment-compatible VNN-LIB properties are stored in:
+
+```text
+formal-verification/vnnlib/
+```
+
+The property files are:
+
+```text
+unsafe_action_0.vnnlib
+unsafe_action_1.vnnlib
+unsafe_action_11.vnnlib
+unsafe_action_12.vnnlib
+unsafe_action_13.vnnlib
+unsafe_action_14.vnnlib
+unsafe_action_15.vnnlib
+```
+
+Each file contains:
+
+- declarations for 3 network inputs;
+- declarations for 22 network outputs;
+- the bounded input domain;
+- the maximizing-output condition for one unsafe action.
+
+Example structure:
+
+```text
+(assert (>= X_0 0.0))
+(assert (<= X_0 1.0))
+
+(assert (>= X_1 0.002))
+(assert (<= X_1 1.0))
+
+(assert (>= X_2 0.0))
+(assert (<= X_2 1.0))
+```
+
+For unsafe action 0, the property additionally requires:
+
+```text
+Y_0 >= Y_1
+Y_0 >= Y_2
+...
+Y_0 >= Y_21
+```
+
+The corresponding VNN-LIB files are generated by:
+
+```text
+formal-verification/py5chesim/vnnlib.py
+```
+
+15. Run All VNN-LIB Queries
+
+Run:
+
+```bash
+./formal-verification/run_vnnlib.sh
+```
+
+The script checks all seven VNN-LIB files against:
+
+```text
+models/formal_dqn_v2_candidate_16000.onnx
+```
+
+using:
+
+```text
+--timeout 300
+```
+
+for each query.
+
+16. VNN-LIB Verification Results
+
+The recorded VNN-LIB results are:
+
+```text
+Action  0 -> UNSAT
+Action  1 -> UNSAT
+Action 11 -> UNSAT
+Action 12 -> UNSAT
+Action 13 -> UNSAT
+Action 14 -> UNSAT
+Action 15 -> UNSAT
+```
+
+The complete output is preserved at:
+
+```text
+evidence/formal-verification/marabou_vnnlib_results.txt
+```
+
+All seven unsafe-action VNN-LIB queries returned UNSAT.
+
+17. Python API Verification Results
+
+The Python API verification also returned:
 
 ```text
 Action  0 [0,   0,   0] -> UNSAT
@@ -267,100 +478,33 @@ Action 14 [40,  0,  60] -> UNSAT
 Action 15 [20,  0,  80] -> UNSAT
 ```
 
-All seven unsafe-action queries returned UNSAT.
-
-The final verification result is therefore:
+The final result is:
 
 ```text
 FORMAL RESULT: PROPERTY VERIFIED
 ```
 
-No action having a URLLC allocation weight below 20 can be an argmax
-anywhere in the bounded URLLC-active input domain.
-
-## 12. What the Formal Proof Establishes
+18. Interpretation
 
 For the exact frozen ONNX model identified by the recorded SHA-256 hash,
-the verification establishes:
+and for every input in the bounded domain:
 
 ```text
-For all inputs satisfying:
-
 x_eMBB  in [0, 1]
 x_URLLC in [0.002, 1]
 x_mMTC  in [0, 1]
-
-no action whose URLLC weight is less than 20 can be an argmax.
 ```
 
-This is a universal property over the bounded continuous verification
-domain.
+none of the actions whose URLLC weight is below 20 can satisfy the encoded
+argmax condition.
 
-It is therefore stronger than testing only a finite number of sampled
-states.
+The result is universal over the continuous bounded verification domain.
 
-## 13. Training Safety Penalty
+It is stronger than testing only a finite collection of sampled input states.
 
-The DQN training code also contains a safety penalty.
+19. What the Formal Result Establishes
 
-The penalty is applied when:
-
-```text
-URLLC load >= 1
-and
-URLLC action weight < 20
-```
-
-The safety penalty encourages the DQN to learn behavior consistent with the
-desired property.
-
-However, training does not itself prove that the learned neural network
-satisfies the requirement for every possible state.
-
-The formal verification stage independently analyzes the frozen neural
-network and searches for counterexamples across the complete bounded input
-domain.
-
-## 14. Artifact Integrity
-
-The project records hashes for the major verification artifacts.
-
-### Verified ONNX model
-
-```text
-699c2d326b8c86f81d86929fcf28e3a00086687e0391c6a1bd4119b92001103e
-```
-
-### Verification script
-
-```text
-9adc69969f5ccfc19a1d89f0fc6f6df84c7cb7e3927c74ef76eb88232a75ce4a
-```
-
-### Final verification log
-
-```text
-5bc8ec1d265803656b8cb673f56db44d0613e1cae40bbc84d5e29ef04cb4c863
-```
-
-These hashes associate the verification result with exact artifacts rather
-than only filenames.
-
-## 15. Recorded Verification Environment
-
-The recorded verification environment is:
-
-| Component | Version |
-|---|---|
-| Python | 3.10.12 |
-| TensorFlow | 2.12.0 |
-| ONNX | 1.17.0 |
-| ONNX Runtime | 1.23.2 |
-| Marabou | v2.0.0 |
-
-## 16. Formal Verification Boundary
-
-The formal proof applies to the following combination:
+The proof establishes a property of:
 
 ```text
 Frozen ONNX DQN
@@ -372,84 +516,251 @@ bounded normalized state space
 URLLC minimum-weight safety property
 ```
 
-The proof does **not** formally establish correctness of the complete
-O-RAN system.
+It establishes that the verified neural policy does not select an action
+with URLLC weight below 20 when URLLC is active in the verified domain.
 
-In particular, it does not formally prove:
+20. What the Formal Result Does Not Establish
 
-- KPM telemetry delivery
-- E2AP transport
-- FlexRIC execution
-- Slice-SM serialization
-- OAI control-message processing
-- MAC scheduler implementation
-- work-conserving redistribution
-- HARQ behavior
-- timing behavior
-- physical-layer behavior
-- throughput guarantees
-- latency guarantees
-- packet-loss guarantees
-- real-RF behavior
+The formal verification does not prove:
 
-These properties are addressed separately through implementation checks,
-runtime safeguards, scheduler instrumentation, and experimental validation.
+- end-to-end URLLC SLA compliance;
+- URLLC latency guarantees;
+- deadline-miss guarantees;
+- packet-delivery guarantees;
+- packet-loss guarantees;
+- throughput guarantees;
+- fairness guarantees;
+- starvation freedom for other slices;
+- temporal behavior;
+- correctness of runtime input measurements;
+- correctness of KPM telemetry;
+- correctness of E2AP transport;
+- correctness of Slice-SM serialization;
+- correctness of OAI control-message processing;
+- correctness of the MAC scheduler implementation;
+- correctness of final PRB assignments;
+- simulator realism;
+- HARQ correctness;
+- physical-layer correctness;
+- complete O-RAN system safety.
 
-## 17. Runtime Assurance
+21. Training Safety Penalty
 
-The deployed system adds runtime assurance mechanisms around the formally
-verified neural network.
+The DQN training source also contains a URLLC safety penalty.
 
-These include:
-
-- ONNX model SHA-256 verification
-- complete three-slice state checking
-- KPM measurement freshness checking
-- exact DQN action-vector validation
-- URLLC safety checking
-- controlled Slice-SM policy installation
-
-The OAI slice manager also rejects weight vectors that are not members of
-the predefined DQN action space.
-
-The project therefore uses two complementary assurance layers:
+The penalty condition is:
 
 ```text
-Formal assurance
-    |
-    +-- verifies a property of the frozen neural-network policy
-
-Runtime assurance
-    |
-    +-- validates model identity, telemetry state, actions,
-        control installation, and scheduler behavior
+URLLC load >= 1
+and
+selected URLLC weight < 20
 ```
 
-## 18. Verification Evidence
-
-Formal-verification evidence is stored under:
+When this condition is true:
 
 ```text
-evidence/formal-verification/
+safety_penalty = 1
 ```
 
-The main evidence files are:
+and the reward includes:
 
 ```text
-formal_dqn_v2_final_verification.txt
-marabou_formal_dqn_v2_results.txt
-FORMAL_VERIFICATION_MANIFEST.txt
-FORMAL_VERIFICATION_SHA256.txt
+-2.0 * safety_penalty
 ```
 
-The exact verified ONNX model is stored at:
+This encourages the DQN to learn behavior consistent with the safety
+requirement.
+
+However, reward shaping is not a formal proof.
+
+The formal verification independently analyzes the frozen neural network
+after training.
+
+22. Training and Verification Separation
+
+The assurance process is:
+
+```text
+training safety penalty
+        |
+        v
+encourage desired behavior
+        |
+        v
+freeze candidate model
+        |
+        v
+identify model with SHA-256
+        |
+        v
+formal verification
+        |
+        v
+deploy verified artifact
+```
+
+The training mechanism and the formal verification stage therefore have
+different roles.
+
+23. Model Identity
+
+The authoritative model is:
 
 ```text
 models/formal_dqn_v2_candidate_16000.onnx
 ```
 
-The original verification source is retained under:
+Its SHA-256 hash is:
 
 ```text
-formal-verification/py5chesim/
+699c2d326b8c86f81d86929fcf28e3a00086687e0391c6a1bd4119b92001103e
 ```
+
+The repository intentionally uses this root model artifact as the
+authoritative verified model.
+
+The previous nested symbolic-link path under:
+
+```text
+formal-verification/py5chesim/models/
+```
+
+has been removed to avoid multiple apparent model locations.
+
+24. Reproducibility Artifacts
+
+The main formal-verification artifacts are:
+
+```text
+formal-verification/
+README.md
+requirements-verification.txt
+run_vnnlib.sh
+py5chesim/verify_formal_dqn_v2.py
+py5chesim/vnnlib.py
+vnnlib/unsafe_action_0.vnnlib
+vnnlib/unsafe_action_1.vnnlib
+vnnlib/unsafe_action_11.vnnlib
+vnnlib/unsafe_action_12.vnnlib
+vnnlib/unsafe_action_13.vnnlib
+vnnlib/unsafe_action_14.vnnlib
+vnnlib/unsafe_action_15.vnnlib
+```
+
+The authoritative verified ONNX artifact is:
+
+```text
+models/formal_dqn_v2_candidate_16000.onnx
+```
+
+The VNN-LIB verification output is:
+
+```text
+evidence/formal-verification/marabou_vnnlib_results.txt
+```
+
+25. Formal Verification Evidence
+
+Formal verification evidence is stored under:
+
+```text
+evidence/formal-verification/
+```
+
+The directory contains the older Python-based verification evidence and the
+new VNN-LIB-based result log.
+
+The VNN-LIB result log should be treated as the main assignment evidence for
+the ONNX plus VNN-LIB verification path.
+
+26. Model Card
+
+The model card is stored at:
+
+```text
+cards/MODEL_CARD.md
+```
+
+It documents:
+
+- model purpose;
+- inputs;
+- outputs;
+- training procedure;
+- intended uses;
+- evaluation;
+- risks;
+- limitations;
+- deployment requirements;
+- reproducibility.
+
+27. Data Card
+
+The data card is stored at:
+
+```text
+cards/DATA_CARD.md
+```
+
+It documents:
+
+- synthetic Py5cheSim training data;
+- transition structure;
+- data source;
+- state representation;
+- reward information;
+- collection method;
+- dataset-size limitation;
+- simulation bias;
+- coverage limitations;
+- simulation-to-reality concerns;
+- privacy;
+- ethical considerations.
+
+28. Summary
+
+The formal-verification workflow is:
+
+```text
+frozen ONNX model
+        |
+        v
+verify SHA-256
+        |
+        v
+define bounded three-input domain
+        |
+        v
+identify unsafe actions
+        |
+        v
+generate counterexample properties
+        |
+        +----------------------+
+        |                      |
+        v                      v
+Python Marabou API       VNN-LIB properties
+        |                      |
+        v                      v
+unsafe-action queries    Marabou CLI
+        |                      |
+        +----------+-----------+
+                   |
+                   v
+             all UNSAT
+                   |
+                   v
+         property verified
+```
+
+The verified claim should be stated narrowly:
+
+```text
+Within the bounded URLLC-active input domain, no action with
+URLLC allocation weight below 20 can be an argmax of the
+verified frozen DQN.
+```
+
+This is a formal property of the neural scheduling policy.
+
+It is not a proof of the complete O-RAN system.

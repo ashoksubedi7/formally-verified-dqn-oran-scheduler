@@ -1,0 +1,124 @@
+Marabou version:
+Marabou version 2.0.0 [HEAD 215828c]
+compiled with GCC version 10.2.1 20210130 (Red Hat 10.2.1-11)
+on Apr 11 2024 23:54:05
+
+============================================================
+Checking unsafe action 0
+============================================================
+Network: /home/rpaudyal/formally-verified-dqn-oran-scheduler/models/formal_dqn_v2_candidate_16000.onnx
+Property: /home/rpaudyal/formally-verified-dqn-oran-scheduler/formal-verification/vnnlib/unsafe_action_0.vnnlib
+
+Engine::processInputQuery: Input query (before preprocessing): 107 equations, 153 variables
+Engine::processInputQuery: Input query (after preprocessing): 149 equations, 229 variables
+
+Input bounds:
+	x0: [ -0.0000,   1.0000] 
+	x1: [  0.0020,   1.0000] 
+	x2: [ -0.0000,   1.0000] 
+
+Branching heuristics set to LargestInterval
+unsat
+
+============================================================
+Checking unsafe action 1
+============================================================
+Network: /home/rpaudyal/formally-verified-dqn-oran-scheduler/models/formal_dqn_v2_candidate_16000.onnx
+Property: /home/rpaudyal/formally-verified-dqn-oran-scheduler/formal-verification/vnnlib/unsafe_action_1.vnnlib
+
+Engine::processInputQuery: Input query (before preprocessing): 107 equations, 153 variables
+Engine::processInputQuery: Input query (after preprocessing): 149 equations, 229 variables
+
+Input bounds:
+	x0: [ -0.0000,   1.0000] 
+	x1: [  0.0020,   1.0000] 
+	x2: [ -0.0000,   1.0000] 
+
+Branching heuristics set to LargestInterval
+unsat
+
+============================================================
+Checking unsafe action 11
+============================================================
+Network: /home/rpaudyal/formally-verified-dqn-oran-scheduler/models/formal_dqn_v2_candidate_16000.onnx
+Property: /home/rpaudyal/formally-verified-dqn-oran-scheduler/formal-verification/vnnlib/unsafe_action_11.vnnlib
+
+Engine::processInputQuery: Input query (before preprocessing): 107 equations, 153 variables
+Engine::processInputQuery: Input query (after preprocessing): 149 equations, 229 variables
+
+Input bounds:
+	x0: [ -0.0000,   1.0000] 
+	x1: [  0.0020,   1.0000] 
+	x2: [ -0.0000,   1.0000] 
+
+Branching heuristics set to LargestInterval
+unsat
+
+============================================================
+Checking unsafe action 12
+============================================================
+Network: /home/rpaudyal/formally-verified-dqn-oran-scheduler/models/formal_dqn_v2_candidate_16000.onnx
+Property: /home/rpaudyal/formally-verified-dqn-oran-scheduler/formal-verification/vnnlib/unsafe_action_12.vnnlib
+
+Engine::processInputQuery: Input query (before preprocessing): 107 equations, 153 variables
+Engine::processInputQuery: Input query (after preprocessing): 149 equations, 229 variables
+
+Input bounds:
+	x0: [ -0.0000,   1.0000] 
+	x1: [  0.0020,   1.0000] 
+	x2: [ -0.0000,   1.0000] 
+
+Branching heuristics set to LargestInterval
+unsat
+
+============================================================
+Checking unsafe action 13
+============================================================
+Network: /home/rpaudyal/formally-verified-dqn-oran-scheduler/models/formal_dqn_v2_candidate_16000.onnx
+Property: /home/rpaudyal/formally-verified-dqn-oran-scheduler/formal-verification/vnnlib/unsafe_action_13.vnnlib
+
+Engine::processInputQuery: Input query (before preprocessing): 107 equations, 153 variables
+Engine::processInputQuery: Input query (after preprocessing): 149 equations, 229 variables
+
+Input bounds:
+	x0: [ -0.0000,   1.0000] 
+	x1: [  0.0020,   1.0000] 
+	x2: [ -0.0000,   1.0000] 
+
+Branching heuristics set to LargestInterval
+unsat
+
+============================================================
+Checking unsafe action 14
+============================================================
+Network: /home/rpaudyal/formally-verified-dqn-oran-scheduler/models/formal_dqn_v2_candidate_16000.onnx
+Property: /home/rpaudyal/formally-verified-dqn-oran-scheduler/formal-verification/vnnlib/unsafe_action_14.vnnlib
+
+Engine::processInputQuery: Input query (before preprocessing): 107 equations, 153 variables
+Engine::processInputQuery: Input query (after preprocessing): 149 equations, 229 variables
+
+Input bounds:
+	x0: [ -0.0000,   1.0000] 
+	x1: [  0.0020,   1.0000] 
+	x2: [ -0.0000,   1.0000] 
+
+Branching heuristics set to LargestInterval
+unsat
+
+============================================================
+Checking unsafe action 15
+============================================================
+Network: /home/rpaudyal/formally-verified-dqn-oran-scheduler/models/formal_dqn_v2_candidate_16000.onnx
+Property: /home/rpaudyal/formally-verified-dqn-oran-scheduler/formal-verification/vnnlib/unsafe_action_15.vnnlib
+
+Engine::processInputQuery: Input query (before preprocessing): 107 equations, 153 variables
+Engine::processInputQuery: Input query (after preprocessing): 149 equations, 229 variables
+
+Input bounds:
+	x0: [ -0.0000,   1.0000] 
+	x1: [  0.0020,   1.0000] 
+	x2: [ -0.0000,   1.0000] 
+
+Branching heuristics set to LargestInterval
+unsat
+

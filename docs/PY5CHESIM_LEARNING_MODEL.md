@@ -1,6 +1,6 @@
 # Py5cheSim DQN Learning Model
 
-## 1. Purpose
+1. Purpose
 
 This document describes the Deep Q-Network (DQN) learning model used in
 the Py5cheSim-based training environment for the formally verified O-RAN
@@ -26,7 +26,7 @@ and integrated into the FlexRIC xApp.
 
 ---
 
-## 2. Role of Py5cheSim
+2. Role of Py5cheSim
 
 Py5cheSim provides the learning and simulation environment used before
 deployment into OpenAirInterface.
@@ -65,7 +65,7 @@ It is separate from the runtime OAI/FlexRIC execution environment.
 
 ---
 
-## 3. Network Slices
+3. Network Slices
 
 The formal-v2 learning model operates on three slices:
 
@@ -88,7 +88,7 @@ later preserved in the deployed ONNX/xApp system.
 
 ---
 
-## 4. DQN State
+4. DQN State
 
 The learning model maintains a three-element state:
 
@@ -131,7 +131,7 @@ training-state source.
 
 ---
 
-## 5. State Normalization
+5. State Normalization
 
 Before a state is passed to the neural network, the formal-v2 code
 normalizes it by:
@@ -170,7 +170,7 @@ the DQN during training.
 
 ---
 
-## 6. Relationship Between Training and Deployment State
+6. Relationship Between Training and Deployment State
 
 The frozen model expects the same three-dimensional normalized input
 structure at deployment:
@@ -196,7 +196,7 @@ three-element representation.
 
 ---
 
-## 7. Action Space
+7. Action Space
 
 The DQN has:
 
@@ -245,7 +245,7 @@ ACTION_SPACE_SIZE = 22
 
 ---
 
-## 8. Action Selection
+8. Action Selection
 
 During inference, the DQN calculates one Q-value for every action.
 
@@ -289,7 +289,7 @@ eMBB, URLLC, and mMTC.
 
 ---
 
-## 9. Training Mode and Inference Mode
+9. Training Mode and Inference Mode
 
 The formal-v2 implementation supports both learning behavior and
 model-only inference behavior.
@@ -329,7 +329,7 @@ evaluation / inference
 
 ---
 
-## 10. Experience Replay
+10. Experience Replay
 
 The DQN uses experience replay.
 
@@ -367,7 +367,7 @@ transitions.
 
 ---
 
-## 11. Replay-State Normalization
+11. Replay-State Normalization
 
 States stored in replay memory are converted to floating-point arrays and
 normalized before being passed to the network.
@@ -399,7 +399,7 @@ with respect to the `/500` scaling.
 
 ---
 
-## 12. Main Network and Target Network
+12. Main Network and Target Network
 
 The implementation follows the DQN pattern of maintaining:
 
@@ -436,7 +436,7 @@ main-network weights.
 
 ---
 
-## 13. DQN Training Update
+13. DQN Training Update
 
 For a sampled replay transition:
 
@@ -476,7 +476,7 @@ the authoritative definition of the training rule.
 
 ---
 
-## 14. Reward Design
+14. Reward Design
 
 The formal-v2 reward function is designed to consider more than raw
 resource allocation.
@@ -497,7 +497,7 @@ values.
 
 ---
 
-## 15. URLLC Delivery Component
+15. URLLC Delivery Component
 
 The training code explicitly tracks URLLC packet delivery behavior.
 
@@ -531,7 +531,7 @@ This encourages the learned policy to consider URLLC delivery performance.
 
 ---
 
-## 16. URLLC Safety Penalty
+16. URLLC Safety Penalty
 
 The formal-v2 training code introduces an explicit safety penalty.
 
@@ -582,7 +582,7 @@ weight to active URLLC traffic.
 
 ---
 
-## 17. Safety Penalty vs. Formal Verification
+17. Safety Penalty vs. Formal Verification
 
 The safety penalty is part of **learning**.
 
@@ -626,7 +626,7 @@ docs/FORMAL_VERIFICATION.md
 
 ---
 
-## 18. Training Duration
+18. Training Duration
 
 The formal-v2 scheduler is configured with:
 
@@ -651,7 +651,7 @@ hash and formal-verification result.
 
 ---
 
-## 19. Model Selection and Frozen Artifact
+19. Model Selection and Frozen Artifact
 
 The final deployment artifact is:
 
@@ -691,7 +691,7 @@ runtime SHA-256 verification
 
 ---
 
-## 20. Model Output
+20. Model Output
 
 The DQN output layer contains one value per action.
 
@@ -719,7 +719,7 @@ selection.
 
 ---
 
-## 21. Resource Allocation in Py5cheSim
+21. Resource Allocation in Py5cheSim
 
 After selecting a weight vector, the Py5cheSim learning scheduler converts
 the selected weights into simulated resource allocations.
@@ -744,7 +744,7 @@ Py5cheSim PRB calculation.
 
 ---
 
-## 22. Training vs. OAI Enforcement
+22. Training vs. OAI Enforcement
 
 The two stages have deliberately different responsibilities.
 
@@ -792,7 +792,7 @@ scheduler provides the actual runtime resource-enforcement mechanism.
 
 ---
 
-## 23. Formal-V2 Training Parameters
+23. Formal-V2 Training Parameters
 
 The retained source establishes the following training parameters:
 
@@ -819,7 +819,7 @@ formal-verification/py5chesim/formal_vanilla_v2.py
 
 ---
 
-## 24. Important Source-Code Note
+24. Important Source-Code Note
 
 The Py5cheSim tree contains multiple scheduler and earlier experimental
 implementations.
@@ -854,7 +854,7 @@ This is especially important when documenting:
 
 ---
 
-## 25. Preserved Training Source
+25. Preserved Training Source
 
 The GitHub repository retains the Py5cheSim files needed to understand the
 formal-v2 learning path under:
@@ -885,7 +885,7 @@ entire original working environment.
 
 ---
 
-## 26. Training Artifact Integrity
+26. Training Artifact Integrity
 
 The formal-verification manifest records hashes for several source and
 model artifacts.
@@ -931,26 +931,25 @@ training and simulation source snapshots.
 
 ---
 
-## 27. Recorded Software Environment
+27. Recorded Software Environment
 
-The verification manifest records the following software versions:
+The current reproducible formal-verification environment uses:
 
 | Component | Version |
 |---|---|
-| Python | 3.10.12 |
-| TensorFlow | 2.12.0 |
-| ONNX | 1.17.0 |
+| Python | 3.10 |
+| Marabou / maraboupy | 2.0.0 |
+| NumPy | 2.2.6 |
+| ONNX | 1.23.2 |
 | ONNX Runtime | 1.23.2 |
-| Marabou | v2.0.0 |
 
-These versions describe the retained verification artifact environment.
+Marabou reports:
 
-They are useful for reproducibility when rebuilding or rechecking the
-learning-to-verification pipeline.
-
+```text
+Marabou version 2.0.0 [HEAD 215828c]
 ---
 
-## 28. Learning and Assurance Pipeline
+28. Learning and Assurance Pipeline
 
 The complete learning-to-deployment path can be summarized as:
 
@@ -1002,7 +1001,7 @@ FlexRIC/OAI deployment
 
 ---
 
-## 29. What the Learning Model Establishes
+29. What the Learning Model Establishes
 
 The training process produces a DQN that learns a policy from simulated
 Py5cheSim interactions.
@@ -1024,7 +1023,7 @@ Those questions are addressed by separate project stages.
 
 ---
 
-## 30. Separation of Evidence
+30. Separation of Evidence
 
 The project intentionally separates three forms of evidence.
 
@@ -1058,7 +1057,7 @@ formal proof or a runtime-system guarantee.
 
 ---
 
-## 31. Related Documentation
+31. Related Documentation
 
 The broader architecture is documented in:
 
@@ -1092,7 +1091,7 @@ runtime validation
 
 ---
 
-## 32. Summary
+32. Summary
 
 The Py5cheSim learning stage trains a three-input, 22-action DQN for
 adaptive resource-weight selection across:

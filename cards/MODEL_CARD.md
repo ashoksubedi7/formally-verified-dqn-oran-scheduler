@@ -1,162 +1,92 @@
-# Model Card: Formally Verified DQN O-RAN Scheduler
-
-## Card Status
-
-**Status:** Working document  
-**Model:** Formal DQN v2  
-**Project:** Formally Verified DQN-Based O-RAN Scheduler
-
-Status labels used throughout this document:
-
-- **[Known]** - already implemented, measured, or verified.
-- **[Proposed]** - planned but not yet fully evaluated.
-- **[TBD]** - information that still needs to be determined.
-
----
-
-## 1. Model Summary
-
-**[Known]**
+# Model Card
 
 The model is a Deep Q-Network (DQN) trained in Py5cheSim to select
-resource-allocation weights for three 5G network slices:
+resource-allocation weights for three 5G network slices: eMBB, URLLC,
+and mMTC.
 
-```text
-eMBB
-URLLC
-mMTC
-```
+The model receives a 3-element normalized state vector representing the
+eMBB, URLLC, and mMTC queue states and produces 22 Q-values, one for
+each predefined scheduling action.
 
-The deployed frozen artifact is:
+1. Person or Organization Developing Model
+
+Gabriela Pereyra, University of the Republic (Udelar)
+
+2. Model Date
+
+September 2026
+
+3. Model Version
+
+Formal DQN v2
+
+4. Frozen Candidate
 
 ```text
 formal_dqn_v2_candidate_16000.onnx
 ```
 
-SHA-256:
+5. Model Type
 
-```text
-699c2d326b8c86f81d86929fcf28e3a00086687e0391c6a1bd4119b92001103e
-```
+Deep Q-Network (DQN) for three-slice 5G/O-RAN resource allocation.
 
-The model receives a three-dimensional normalized network state and produces
-22 Q-values.
+6. Proposed Approach
 
----
-
-## 2. Proposed Approach
-
-The system uses the DQN as a policy-selection component rather than allowing
-the neural network to allocate individual physical RBs directly.
+The system uses the DQN as a policy-selection component rather than
+allowing the neural network to allocate individual physical resource
+blocks directly.
 
 The control path is:
 
 ```text
-three-slice network state
-        |
-        v
+Network state
+    ->
 DQN
-        |
-        v
+    ->
 22 Q-values
-        |
-        v
+    ->
 argmax action
-        |
-        v
+    ->
 slice-weight vector
-        |
-        v
+    ->
 O-RAN control
-        |
-        v
-OAI work-conserving MAC scheduler
 ```
 
-This separates:
+7. Intended Users
 
-```text
-learning-based policy selection
-```
+Since it is currently a research prototype rather than a production
+model, the current model is intended primarily for researchers studying:
 
-from:
+- O-RAN resource management,
+- learning-based RAN scheduling,
+- FlexRIC/OAI integration,
+- and formal assurance of neural-network controllers.
 
-```text
-deterministic scheduler enforcement
-```
-
----
-
-## 3. Intended Users
-
-**[Known]**
-
-The current model is intended primarily for:
-
-- researchers studying O-RAN resource management,
-- researchers studying learning-based RAN scheduling,
-- developers evaluating FlexRIC/OAI integration,
-- and researchers studying formal assurance of neural-network controllers.
-
-It is currently a research prototype rather than a production operator
-model.
-
----
-
-## 4. Intended Uses
-
-**[Known]**
+8. Intended Uses
 
 The model is intended to:
 
-- observe relative load across eMBB, URLLC, and mMTC slices,
-- select one predefined slice-weight action,
-- provide adaptive priority under changing traffic,
-- protect active URLLC traffic according to the verified property,
-- and control an OAI downlink scheduler through the near-RT RIC.
+- observe relative load across eMBB, URLLC, and mMTC slices;
+- select one predefined slice-weight action;
+- provide adaptive priority under changing traffic;
+- protect active URLLC traffic according to the verified property;
+- control an OAI downlink scheduler through the near-RT RIC.
 
-The current implementation applies to:
+9. Uses Outside the Current Scope
 
-```text
-downlink
-three slices
-new-data Phase-3 scheduling
-```
+It should not be deployed without the surrounding runtime validation
+and safety mechanisms implemented by this project for:
 
----
-
-## 5. Uses Outside the Current Scope
-
-The current model should not be assumed suitable for:
-
-- arbitrary commercial 5G deployments,
+- commercial 5G deployments,
 - uplink scheduling,
-- admission control,
-- mobility management,
-- power control,
-- beam management,
-- HARQ control,
-- security decisions,
-- emergency or life-critical communication guarantees,
-- or networks using substantially different state definitions.
+- or emergency or life-critical communication guarantees.
 
-It should not be deployed without the surrounding runtime validation and
-safety mechanisms implemented by this project.
-
----
-
-## 6. Input
-
-**[Known]**
+10. Input
 
 The model receives:
 
 ```text
-[
-    x_eMBB,
-    x_URLLC,
-    x_mMTC
-]
+[x_eMBB, x_URLLC, x_mMTC]
 ```
 
 Each value is normalized using:
@@ -165,41 +95,22 @@ Each value is normalized using:
 x = clamp(raw_value, 0, 500) / 500
 ```
 
-The expected input range is:
+Thus, the input range is:
 
 ```text
 0.0 <= x <= 1.0
 ```
 
-The input ordering is fixed:
+Each input number represents how full a slice's packet queue is relative
+to the reference value of 500 packets.
 
-```text
-0 -> eMBB
-1 -> URLLC
-2 -> mMTC
-```
+These numbers represent traffic waiting to be transmitted.
 
----
+11. Output
 
-## 7. Output
+The model produces 22 Q-values corresponding to 22 predefined actions.
 
-**[Known]**
-
-The model produces:
-
-```text
-22 Q-values
-```
-
-corresponding to 22 predefined actions.
-
-The selected action is:
-
-```text
-argmax(Q-values)
-```
-
-Each action represents:
+The selected action represents:
 
 ```text
 [eMBB weight, URLLC weight, mMTC weight]
@@ -211,13 +122,8 @@ Example:
 Action 7 -> [20, 80, 0]
 ```
 
-The weights are scheduling preferences rather than literal PRB assignments.
-
----
-
-## 8. Training Data
-
-**[Known]**
+The weights are scheduling preferences rather than actual PRB
+assignments.
 
 The model was trained using synthetic interaction data generated by
 Py5cheSim.
@@ -234,6 +140,16 @@ Each replay transition contains:
 )
 ```
 
+Example:
+
+```text
+current_state = [245, 9, 500]
+action        = 12
+reward        = -1.624
+next_state    = [185, 500, 500]
+terminal      = False
+```
+
 The source data is generated from simulated:
 
 - slice traffic,
@@ -242,58 +158,25 @@ The source data is generated from simulated:
 - resource utilization,
 - and delivery performance.
 
-See:
-
-```text
-cards/DATA_CARD.md
-```
-
-for the accompanying data documentation.
-
----
-
-## 9. Training Procedure
-
-**[Known]**
+12. Training Procedure
 
 The formal-v2 implementation uses:
 
-- experience replay,
-- a main Q-network,
-- a target Q-network,
-- normalized three-dimensional inputs,
-- and a 22-action output space.
+- experience replay;
+- a main Q-network;
+- a target Q-network;
+- normalized three-element inputs;
+- a 22-action output space.
 
-Recorded configuration includes:
+13. Reward Design
 
-| Parameter | Value |
-|---|---:|
-| Training episodes | 20,000 |
-| Replay-buffer capacity | 10,000 |
-| Minimum replay size before training | 500 |
-| Target-network update interval | 200 |
-| Number of actions | 22 |
-| State normalization divisor | 500 |
+The training objective combines multiple network considerations,
+including:
 
-The exact retained implementation is:
-
-```text
-formal-verification/py5chesim/formal_vanilla_v2.py
-```
-
----
-
-## 10. Reward Design
-
-**[Known]**
-
-The training objective combines multiple network considerations, including:
-
-- slice service satisfaction,
-- resource utilization,
-- overall efficiency,
-- URLLC packet delivery,
-- and URLLC safety.
+- resource utilization;
+- overall efficiency;
+- URLLC packet delivery;
+- URLLC safety.
 
 The safety condition is:
 
@@ -303,7 +186,7 @@ and
 selected URLLC weight < 20
 ```
 
-which produces:
+When this condition is true:
 
 ```text
 safety_penalty = 1
@@ -315,309 +198,111 @@ The reward includes:
 -2.0 * safety_penalty
 ```
 
-The reward also contains a positive URLLC delivery term.
-
 This reward design intentionally prioritizes URLLC protection.
 
----
-
-## 11. Formal Safety Property
-
-**[Known]**
-
-The selected frozen model has been formally analyzed with Marabou.
-
-The verified property is:
-
-```text
-URLLC active
-    =>
-selected URLLC weight >= 20
-```
-
-over the bounded normalized domain:
-
-```text
-x_eMBB  in [0.000, 1.000]
-x_URLLC in [0.002, 1.000]
-x_mMTC  in [0.000, 1.000]
-```
-
-All unsafe-action counterexample queries returned:
-
-```text
-UNSAT
-```
-
-This formal result applies to the frozen model identified by the recorded
-SHA-256 hash.
-
-See:
-
-```text
-docs/FORMAL_VERIFICATION.md
-```
-
----
-
-## 12. Current Evaluation
-
-**[Known]**
-
-Evaluation completed so far includes:
-
-### Model-level checks
-
-- ONNX conversion,
-- Python/C inference comparison,
-- frozen-model SHA-256 verification,
-- and formal safety verification.
-
-### Integration-level checks
-
-- FlexRIC native ONNX inference,
-- three-slice KPM input,
-- Slice-SM control,
-- OAI policy installation,
-- and action validation.
-
-### Scheduler-level checks
-
-- RFsim congestion testing,
-- RB-level scheduler instrumentation,
-- protected scheduling validation,
-- resource redistribution,
-- and zero-weight residual borrowing.
-
----
-
-## 13. Current Quantitative Evidence
-
-**[Known]**
-
-For saturated three-slice traffic, the model selected:
-
-```text
-[20, 80, 0]
-```
-
-and the successful protected RB allocation between eMBB and URLLC was
-approximately:
-
-```text
-eMBB  = 20.43%
-URLLC = 79.57%
-```
-
-This result validates protected scheduling behavior.
-
-It does not mean that application throughput is guaranteed to be exactly:
-
-```text
-20% / 80% / 0%
-```
-
-because final throughput depends on additional network and radio factors.
-
----
-
-## 14. Evaluation Metrics
-
-### Already Used
-
-**[Known]**
+14. Evaluation Metrics
 
 Current evaluation uses:
 
-- formal property satisfaction,
-- ONNX model identity/hash consistency,
-- inference-output consistency,
-- selected action,
-- protected RB allocation,
-- redistributed RB allocation,
-- residual borrowing,
-- Phase-3 committed RB count,
-- throughput observations,
-- and scheduler behavior under congestion.
+- formal property satisfaction using Marabou;
+- ONNX model identity/hash consistency;
+- selected action;
+- RB count.
 
-### Planned Metrics
+Future evaluation could include:
 
-**[Proposed]**
+- per-slice throughput;
+- packet-loss rate;
+- URLLC latency;
+- SLA satisfaction rate;
+- resource utilization;
+- inference latency;
+- E2 control latency;
+- scheduler execution overhead;
+- robustness to traffic changes.
 
-Future evaluation should include:
-
-- per-slice throughput,
-- packet-loss rate,
-- URLLC latency,
-- SLA satisfaction rate,
-- resource utilization,
-- fairness,
-- starvation frequency,
-- action-switching frequency,
-- inference latency,
-- E2 control latency,
-- scheduler execution overhead,
-- and robustness to traffic changes.
-
-Where appropriate, results should include:
-
-```text
-mean
-standard deviation
-confidence interval
-```
-
-rather than single-run measurements.
-
----
-
-## 15. Evaluation Scenarios
-
-### Completed
-
-**[Known]**
+15. Evaluation Scenarios
 
 Current testing includes:
 
-- RFsim,
-- three slices,
-- multiple simulated UEs,
-- idle/busy slice combinations,
-- congestion,
-- saturated multi-slice traffic,
-- and work-conserving resource borrowing.
+- RFsim;
+- three slices;
+- multiple simulated UEs.
 
-### Planned
+Additional scenarios in the future could include:
 
-**[Proposed]**
+- different traffic mixtures;
+- bursty traffic;
+- larger UE populations;
+- changing channel quality;
+- USRP operation.
 
-Additional scenarios should include:
+16. Conditions Where Performance May Differ
 
-- different traffic mixtures,
-- different offered loads,
-- bursty traffic,
-- larger UE populations,
-- changing channel quality,
-- mobility,
-- longer experiments,
-- repeated random seeds,
-- USRP operation,
-- and real UEs.
+Performance may differ when the deployment environment differs
+substantially from Py5cheSim training conditions, such as:
 
----
+- very large UE populations;
+- degraded RF conditions;
+- interference;
+- missing KPM measurements.
 
-## 16. Conditions Where Performance May Differ
-
-**[Anticipated]**
-
-Performance may differ when the deployment environment differs substantially
-from Py5cheSim training conditions.
-
-Examples include:
-
-- traffic distributions not represented during training,
-- very large UE populations,
-- extreme congestion,
-- rapidly changing traffic,
-- degraded RF conditions,
-- heterogeneous CQI,
-- mobility,
-- interference,
-- delayed telemetry,
-- missing KPM measurements,
-- and state values outside the assumed training distribution.
-
-Performance may also differ across traffic classes because the reward
-intentionally gives additional importance to URLLC behavior.
-
----
-
-## 17. Potential Bias
+17. Potential Bias
 
 The model is not intended to be neutral among all slices.
 
 The training objective intentionally includes URLLC-specific protection.
 
-Therefore the policy may favor URLLC when resource competition occurs.
+Therefore, the policy may favor URLLC when resource competition occurs.
 
-This is a design decision intended to represent a priority requirement, but
-it may reduce resources available to eMBB or mMTC during congestion.
+This is a design decision intended to represent a priority requirement,
+but it may reduce resources available to eMBB or mMTC during congestion.
 
 The work-conserving OAI scheduler partially mitigates unnecessary resource
 waste by allowing redistribution and residual borrowing.
 
----
+18. Risks
 
-## 18. Risks
+Potential risks could include:
 
-Potential risks include:
+- poor generalization outside simulated training conditions;
+- under-representation of radio conditions in the model state;
+- telemetry delay or stale measurements;
+- model/version mismatch;
+- unexpected interaction with the underlying MAC scheduler.
 
-- poor generalization outside simulated training conditions,
-- incorrect action selection for unseen traffic states,
-- over-prioritization of one traffic class,
-- under-representation of radio conditions in the model state,
-- telemetry delay or stale measurements,
-- mismatch between simulation state and deployed state semantics,
-- model/version mismatch,
-- and unexpected interaction with the underlying MAC scheduler.
-
-The project addresses some of these risks using:
-
-- model hash verification,
-- formal verification,
-- fixed action-space validation,
-- state freshness checks,
-- runtime safety monitoring,
-- and deterministic scheduler enforcement.
-
----
-
-## 19. Limitations
-
-**[Known]**
+19. Limitations
 
 The model observes only three aggregate state values.
 
 It does not directly observe:
 
-- per-UE CQI,
-- individual latency,
-- mobility,
-- interference,
-- HARQ state,
-- per-UE buffers,
-- detailed channel conditions,
-- or physical-layer measurements.
+- per-UE CQI;
+- individual latency;
+- HARQ state;
+- per-UE buffers;
+- physical-layer measurements.
 
 The model therefore cannot directly optimize all factors affecting radio
 performance.
 
-The formal proof also covers only the specified DQN safety property, not the
-entire O-RAN system.
+The formal proof also covers only the specified DQN safety property, not
+the entire O-RAN system.
 
----
+20. Simulation-to-Reality Gap
 
-## 20. Simulation-to-Reality Gap
-
-**[Known]**
-
-The model was trained using Py5cheSim and deployed in an OAI/FlexRIC system.
+The model was trained using Py5cheSim and deployed in an OAI/FlexRIC
+system.
 
 Although both environments use the same three-element normalized input
 structure, their internal system dynamics are not identical.
 
-Therefore good simulation performance does not automatically imply equivalent
-real-network performance.
+Therefore, good simulation performance does not automatically imply
+equivalent real-network performance.
 
-**[Proposed]**
+USRP/real-RF testing can be used to evaluate this gap in the future.
 
-USRP/real-RF testing will be used to evaluate this gap.
-
----
-
-## 21. Privacy and Ethical Considerations
-
-**[Known]**
+21. Privacy and Ethical Considerations
 
 The current model was trained on synthetic simulation data and does not
 require personal user information.
@@ -632,117 +317,35 @@ congestion.
 For this reason, priority rules and reward choices should be explicitly
 documented rather than treated as neutral.
 
----
-
-## 22. Deployment Requirements
+22. Deployment Requirements
 
 The current model should be used together with:
 
-- exact ONNX hash verification,
-- input normalization,
-- complete-state checks,
-- telemetry freshness checks,
-- predefined action validation,
-- runtime safety monitoring,
-- and work-conserving scheduler enforcement.
+- exact ONNX hash verification;
+- input normalization;
+- predefined action validation.
 
-The model should not be treated as an unrestricted controller.
+23. Reproducibility
 
----
-
-## 23. Reproducibility
-
-**[Known]**
-
-The repository preserves:
+The repository:
 
 ```text
-training source
-simulation source
-frozen ONNX model
-verification script
-formal-verification results
-OAI integration source
-FlexRIC xApp source
-RB-validation evidence
-artifact hashes
+https://github.com/ashoksubedi7/formally-verified-dqn-oran-scheduler.git
 ```
 
-The frozen model SHA-256 is:
+preserves:
 
-```text
-699c2d326b8c86f81d86929fcf28e3a00086687e0391c6a1bd4119b92001103e
-```
+- training source;
+- simulation source;
+- frozen ONNX model;
+- formal-verification results;
+- OAI integration source.
 
-**[TBD]**
+24. Future Evaluations
 
-Full training reproducibility still needs improved recording of:
+Future evaluation should include:
 
-- random seeds,
-- exact transition count,
-- scenario distributions,
-- training duration,
-- hardware used for training,
-- candidate-selection criteria,
-- and repeated-run variability.
-
----
-
-## 24. Future Evaluation
-
-**[Proposed]**
-
-Before making stronger claims about general performance, the project should
-evaluate:
-
-1. multiple independent training/evaluation runs,
-2. unseen traffic mixtures,
-3. larger UE populations,
-4. latency and packet-loss SLAs,
-5. inference and control overhead,
-6. failure and fallback behavior,
-7. comparison with baseline schedulers,
-8. USRP/real-UE deployment,
-9. robustness to telemetry delay,
-10. and long-duration stability.
-
----
-
-## 25. Model Card Summary
-
-The current model is a research DQN that maps:
-
-```text
-3 normalized slice-load inputs
-        ->
-22 predefined scheduling actions
-```
-
-Its key design characteristics are:
-
-```text
-offline simulation training
-        +
-URLLC-aware reward design
-        +
-fixed action space
-        +
-formal verification
-        +
-runtime safety checks
-        +
-deterministic work-conserving enforcement
-```
-
-The strongest current evidence concerns:
-
-- the formally verified URLLC weight property,
-- successful OAI/FlexRIC integration,
-- and RB-level validation of the selected scheduler weights.
-
-The largest remaining uncertainty is how well the policy generalizes from
-Py5cheSim/RFsim conditions to broader traffic patterns and real RF
-deployments.
-
-This card should be updated as new training runs, evaluation metrics,
-baseline comparisons, and USRP experiments become available.
+- unseen traffic mixtures;
+- larger UE populations;
+- latency and packet-loss SLAs;
+- USRP/real-UE deployment.

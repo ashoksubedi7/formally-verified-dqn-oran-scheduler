@@ -9,11 +9,13 @@ from pathlib import Path
 # ------------------------------------------------------------
 
 BASE_DIR = Path(__file__).resolve().parent
-MARABOU_DIR = BASE_DIR.parent / "Marabou"
-MODEL = BASE_DIR / "models" / "formal_dqn_v2_candidate_16000.onnx"
+REPO_ROOT = BASE_DIR.parents[1]
 
-# Allow importing the locally built Marabou Python API
-sys.path.insert(0, str(MARABOU_DIR))
+MODEL = (
+    REPO_ROOT
+    / "models"
+    / "formal_dqn_v2_candidate_16000.onnx"
+)
 
 from maraboupy import Marabou
 

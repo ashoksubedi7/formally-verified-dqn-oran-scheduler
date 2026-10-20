@@ -1,25 +1,130 @@
 FORMAL DQN V2 — VERIFICATION MANIFEST
-Generated: 2026-09-19T23:53:01-04:00
+Updated: 2026-10-20
 
-=== VERIFIED ONNX ===
+=== VERIFIED MODEL ===
+
 699c2d326b8c86f81d86929fcf28e3a00086687e0391c6a1bd4119b92001103e  models/formal_dqn_v2_candidate_16000.onnx
 
-=== VERIFICATION SCRIPT ===
-9adc69969f5ccfc19a1d89f0fc6f6df84c7cb7e3927c74ef76eb88232a75ce4a  verify_formal_dqn_v2.py
 
-=== FINAL VERIFICATION LOG ===
-5bc8ec1d265803656b8cb673f56db44d0613e1cae40bbc84d5e29ef04cb4c863  formal_dqn_v2_final_verification.txt
+=== PYTHON VERIFIER ===
 
-=== TRAINING / SIMULATION SOURCE ===
-fad9bdbc758c403be18c9b485fe355340a1f969500e0507e3981a77f62265b8a  formal_vanilla_v2.py
-9b692dcc1d24fa651a5fa11b691602edad563bf6d004b31f469bf22146324494  simulation_profiles/simulation_formal.py
-f515e9a2698ebabcc7e5905800568aef312378677dd9eb84351ed1c0f286cca6  Cell.py
+5a480ba2624567a7323dacf35fafebe0ae1b8b2f99eebd73818532813f635aae  formal-verification/py5chesim/verify_formal_dqn_v2.py
 
-=== SOFTWARE VERSIONS ===
-Python 3.10.12
-TensorFlow 2.12.0
-ONNX 1.17.0
-ONNX Runtime 1.23.2
+=== VNN-LIB GENERATOR ===
 
-=== MARABOU VERSION ===
-v2.0.0
+e0d88eb3c5dd5b9c5686b53d592b97565f690970ff67ccc9fab9541ddc0f7427  formal-verification/py5chesim/vnnlib.py
+
+
+=== VNN-LIB RUNNER ===
+
+cef164f62a37b1d8f4e7e9315d53d4ae2dc990cba3a6ee97b3ce739e68d57497  formal-verification/run_vnnlib.sh
+
+
+=== VERIFICATION REQUIREMENTS ===
+
+d82cf99b81b0b24dbb81ce1643eae9d04e376837635770c71b2b9ac1a14993d0  formal-verification/requirements-verification.txt
+
+
+=== VNN-LIB PROPERTIES ===
+
+312e00718d75bc9bf9236fce58da80d7f072be5b259cbaaadf51ba191da44047  formal-verification/vnnlib/unsafe_action_0.vnnlib
+3928ad3a95d90c2b29c99b15eae90d838399146a3e1d90619d421727481b0444  formal-verification/vnnlib/unsafe_action_1.vnnlib
+9d11a9283f87c07784be7f19cffe69fb71916f1d039ecc5f367f08d978f08f3f  formal-verification/vnnlib/unsafe_action_11.vnnlib
+864dcec327434739b5e3dbf7cb038739a03b71bc695aba4a7bf74ddcde86858e  formal-verification/vnnlib/unsafe_action_12.vnnlib
+006938c4f79d114961bdfc6737c0fa402d243f493a16e5683758d5ff759c593f  formal-verification/vnnlib/unsafe_action_13.vnnlib
+9bd665edb8b358fb0240a6c365f7ec7ee84464985f348b78746ec3ae3a25c6de  formal-verification/vnnlib/unsafe_action_14.vnnlib
+aa0a938f96527db4573fcd44cf5c3e921b267ba27be5e4299a4689ae180848fd  formal-verification/vnnlib/unsafe_action_15.vnnlib
+
+
+=== VNN-LIB VERIFICATION OUTPUT ===
+
+de197348449466d98dc7d49917bfa55370152fe840aae10b41b0533dd99cd046  evidence/formal-verification/marabou_vnnlib_results.txt
+
+
+=== VERIFIED PROPERTY ===
+
+Input domain:
+
+x_eMBB  in [0.000, 1.000]
+x_URLLC in [0.002, 1.000]
+x_mMTC  in [0.000, 1.000]
+
+Safety property:
+
+URLLC active
+    =>
+selected URLLC allocation weight >= 20
+
+Unsafe actions:
+
+0
+1
+11
+12
+13
+14
+15
+
+Counterexample condition for each unsafe action u:
+
+Q_u >= Q_j
+
+for every j != u.
+
+Ties are therefore included conservatively.
+
+
+=== VNN-LIB RESULTS ===
+
+Action 0  -> UNSAT
+Action 1  -> UNSAT
+Action 11 -> UNSAT
+Action 12 -> UNSAT
+Action 13 -> UNSAT
+Action 14 -> UNSAT
+Action 15 -> UNSAT
+
+FORMAL RESULT: PROPERTY VERIFIED
+
+
+=== SOFTWARE ENVIRONMENT ===
+
+Marabou:
+2.0.0
+
+Marabou build identifier:
+HEAD 215828c
+
+Python verification dependencies:
+
+maraboupy==2.0.0
+numpy==2.2.6
+onnx==1.23.2
+onnxruntime==1.23.2
+
+Per-query timeout:
+300 seconds
+
+
+=== VERIFICATION METHODS ===
+
+1. Marabou Python API
+
+formal-verification/py5chesim/verify_formal_dqn_v2.py
+
+2. ONNX + VNN-LIB + Marabou CLI
+
+formal-verification/run_vnnlib.sh
+
+
+=== INTERPRETATION ===
+
+For the exact ONNX model identified by the SHA-256 hash above and within
+the bounded URLLC-active input domain, none of the actions assigning URLLC
+a scheduling weight below 20 can satisfy the encoded argmax condition.
+
+This establishes a property of the frozen neural scheduling policy.
+
+It does not establish end-to-end URLLC SLA compliance, latency guarantees,
+packet-loss guarantees, throughput guarantees, correctness of final PRB
+allocation, or correctness of the complete O-RAN system.
